@@ -1,26 +1,34 @@
 // ==========================================================
 // FOS PERFORMANCE PORTAL
-// ERROR-TOLERANT GOOGLE SHEETS CONNECTION
+// COMPLETE WORKING APPLICATION
+// ==========================================================
+
+
+// ==========================================================
+// GOOGLE SHEETS WEB APP URL
 // ==========================================================
 
 const GOOGLE_SHEET_API =
   "https://script.google.com/macros/s/AKfycbx3DH5vcJaP3PjC2PwKsIA_ZwIFoF1gdJ-26gOKrjY6MLaakuyqI7dwSKC7xbNlQw/exec";
 
+
 // ==========================================================
-// GLOBAL DATA
+// GLOBAL VARIABLES
 // ==========================================================
 
 let rawData = [];
-let filteredData = [];
-let currentEmployee = null;
 
-let loading = false;
-let lastUpdated = null;
+let filteredData = [];
+
+let currentEmployeeData = [];
+
+let currentPage = "dashboard";
+
+let isLoading = false;
 
 
 // ==========================================================
-// COLUMN ALIASES
-// Automatically detects different Google Sheet column names
+// SAFE FIELD ALIASES
 // ==========================================================
 
 const FIELD_ALIASES = {
@@ -32,6 +40,7 @@ const FIELD_ALIASES = {
     "employee code",
     "employee id",
     "emp code",
+    "emp id",
     "code"
   ],
 
@@ -39,10 +48,16 @@ const FIELD_ALIASES = {
     "username",
     "user name",
     "user",
-    "rm name",
+    "login id",
+    "login"
+  ],
+
+  name: [
     "name",
     "employee name",
-    "rm"
+    "rm name",
+    "advisor name",
+    "fos name"
   ],
 
   doj: [
@@ -55,20 +70,20 @@ const FIELD_ALIASES = {
   tl: [
     "tl",
     "team leader",
-    "teamleader",
-    "tl name"
+    "tl name",
+    "reporting tl"
   ],
 
   zm: [
     "zm",
-    "zonal manager",
     "zone manager",
     "zm name"
   ],
 
   city: [
     "city",
-    "location"
+    "location",
+    "branch city"
   ],
 
   zone: [
@@ -82,377 +97,436 @@ const FIELD_ALIASES = {
     "training manager"
   ],
 
-  batch: [
-    "batch",
-    "batch name"
-  ],
-
-  tenure: [
-    "tenure",
-    "experience"
-  ],
-
   date: [
     "date",
-    "report date",
-    "day"
+    "business date",
+    "activity date",
+    "report date"
   ],
 
   appointment: [
     "appointment",
     "appointments",
-    "appt",
-    "appt count"
+    "appt"
   ],
 
   visit: [
     "visit",
-    "visits",
-    "visit count"
+    "visits"
   ],
 
   booking: [
     "booking",
-    "bookings",
-    "booking count"
+    "bookings"
   ],
 
   ape: [
     "ape",
-    "total ape",
-    "premium",
-    "amount"
-  ],
-
-  my: [
-    "my",
-    "month",
-    "month year"
+    "annual premium equivalent",
+    "premium"
   ]
 
 };
 
 
 // ==========================================================
-// SAFE HELPERS
+// HELPER FUNCTIONS
 // ==========================================================
 
-function normalizeKey(value) {
+function normalizeText(value) {
 
-  try {
-
-    return String(value || "")
-      .toLowerCase()
-      .trim()
-      .replace(/[_-]/g, " ")
-      .replace(/\s+/g, " ");
-
-  } catch (error) {
-
+  if (value === null || value === undefined) {
     return "";
-
   }
+
+  return String(value)
+    .trim()
+    .toLowerCase();
 
 }
 
 
-function safeText(value, fallback = "-") {
+function safeString(value) {
 
-  try {
-
-    if (value === null || value === undefined || value === "") {
-      return fallback;
-    }
-
-    return String(value);
-
-  } catch (error) {
-
-    return fallback;
-
+  if (value === null || value === undefined) {
+    return "";
   }
+
+  return String(value).trim();
 
 }
 
 
-function safeNumber(value) {
+function numberValue(value) {
 
-  try {
-
-    if (value === null || value === undefined || value === "") {
-      return 0;
-    }
-
-    if (typeof value === "number") {
-      return isFinite(value) ? value : 0;
-    }
-
-    const cleaned = String(value)
-      .replace(/₹/g, "")
-      .replace(/,/g, "")
-      .replace(/[^\d.-]/g, "");
-
-    const number = Number(cleaned);
-
-    return isFinite(number) ? number : 0;
-
-  } catch (error) {
-
+  if (value === null || value === undefined || value === "") {
     return 0;
+  }
+
+  const cleaned = String(value)
+    .replace(/₹/g, "")
+    .replace(/,/g, "")
+    .replace(/[^\d.-]/g, "");
+
+  const number = Number(cleaned);
+
+  return Number.isFinite(number) ? number : 0;
+
+}
+
+
+function percentage(part, total) {
+
+  if (!total || total <= 0) {
+    return 0;
+  }
+
+  return (part / total) * 100;
+
+}
+
+
+function formatNumber(value) {
+
+  return numberValue(value).toLocaleString("en-IN");
+
+}
+
+
+function formatPercent(value) {
+
+  return numberValue(value).toFixed(1) + "%";
+
+}
+
+
+function formatAPE(value) {
+
+  const amount = numberValue(value);
+
+  if (amount >= 10000000) {
+    return "₹" + (amount / 10000000).toFixed(2) + " Cr";
+  }
+
+  if (amount >= 100000) {
+    return "₹" + (amount / 100000).toFixed(2) + " L";
+  }
+
+  return "₹" + amount.toLocaleString("en-IN");
+
+}
+
+
+function escapeHTML(value) {
+
+  return safeString(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+}
+
+
+// ==========================================================
+// GET VALUE USING COLUMN ALIASES
+// ==========================================================
+
+function getField(record, fieldName) {
+
+  if (!record || typeof record !== "object") {
+    return "";
+  }
+
+
+  const aliases = FIELD_ALIASES[fieldName] || [];
+
+
+  const recordKeys = Object.keys(record);
+
+
+  // Exact normalized matching
+
+  for (const alias of aliases) {
+
+    const normalizedAlias = normalizeText(alias);
+
+    for (const key of recordKeys) {
+
+      if (normalizeText(key) === normalizedAlias) {
+        return record[key];
+      }
+
+    }
 
   }
 
-}
 
+  // Partial matching
 
-function safeArray(value) {
+  for (const alias of aliases) {
 
-  return Array.isArray(value) ? value : [];
+    const normalizedAlias = normalizeText(alias);
 
-}
+    for (const key of recordKeys) {
 
+      const normalizedKey = normalizeText(key);
 
-// ==========================================================
-// FIND FIELD FROM ROW
-// ==========================================================
+      if (
+        normalizedKey.includes(normalizedAlias) ||
+        normalizedAlias.includes(normalizedKey)
+      ) {
 
-function getField(row, fieldName) {
-
-  try {
-
-    if (!row || typeof row !== "object") {
-      return "";
-    }
-
-    const aliases = FIELD_ALIASES[fieldName] || [];
-
-    const keys = Object.keys(row);
-
-    // Exact normalized match
-    for (const alias of aliases) {
-
-      const normalizedAlias = normalizeKey(alias);
-
-      for (const key of keys) {
-
-        if (normalizeKey(key) === normalizedAlias) {
-          return row[key];
+        if (normalizedKey.length > 1) {
+          return record[key];
         }
 
       }
 
     }
 
+  }
 
-    // Partial match
-    for (const alias of aliases) {
 
-      const normalizedAlias = normalizeKey(alias);
+  return "";
 
-      for (const key of keys) {
+}
 
-        const normalizedKey = normalizeKey(key);
 
-        if (
-          normalizedKey.includes(normalizedAlias) ||
-          normalizedAlias.includes(normalizedKey)
-        ) {
+// ==========================================================
+// NORMALIZE GOOGLE SHEET RECORD
+// ==========================================================
 
-          return row[key];
+function normalizeRecord(record) {
 
-        }
+  const normalized = {
+
+    original: record,
+
+    ecode: safeString(getField(record, "ecode")),
+
+    username: safeString(getField(record, "username")),
+
+    name: safeString(getField(record, "name")),
+
+    doj: safeString(getField(record, "doj")),
+
+    tl: safeString(getField(record, "tl")),
+
+    zm: safeString(getField(record, "zm")),
+
+    city: safeString(getField(record, "city")),
+
+    zone: safeString(getField(record, "zone")),
+
+    trainer: safeString(getField(record, "trainer")),
+
+    date: safeString(getField(record, "date")),
+
+    appointment: numberValue(
+      getField(record, "appointment")
+    ),
+
+    visit: numberValue(
+      getField(record, "visit")
+    ),
+
+    booking: numberValue(
+      getField(record, "booking")
+    ),
+
+    ape: numberValue(
+      getField(record, "ape")
+    )
+
+  };
+
+
+  // ========================================================
+  // FALLBACK FOR EMPTY ECODE
+  // ========================================================
+
+  // If the sheet has an unexpected column structure,
+  // try common values from the original record.
+
+  if (!normalized.ecode) {
+
+    const keys = Object.keys(record);
+
+    for (const key of keys) {
+
+      const value = safeString(record[key]);
+
+      if (
+        value &&
+        (
+          normalizeText(key).includes("code") ||
+          normalizeText(key).includes("id")
+        )
+      ) {
+
+        normalized.ecode = value;
+        break;
 
       }
 
     }
 
+  }
 
-    return "";
+
+  return normalized;
+
+}
+
+
+// ==========================================================
+// UNIQUE VALUES
+// ==========================================================
+
+function uniqueValues(data, field) {
+
+  const values = data
+    .map(item => safeString(item[field]))
+    .filter(value => value !== "");
+
+  return [...new Set(values)]
+    .sort((a, b) => a.localeCompare(b));
+
+}
+
+
+// ==========================================================
+// CACHE DATA
+// ==========================================================
+
+function saveToCache(data) {
+
+  try {
+
+    localStorage.setItem(
+      "fosPortalData",
+      JSON.stringify(data)
+    );
+
+    localStorage.setItem(
+      "fosPortalLastUpdated",
+      new Date().toISOString()
+    );
 
   } catch (error) {
 
-    return "";
+    console.log("Cache save failed");
 
   }
 
 }
 
 
-// ==========================================================
-// CLEAN ONE ROW
-// Website continues even if a row is bad
-// ==========================================================
-
-function cleanRow(row, index) {
+function loadFromCache() {
 
   try {
 
-    if (!row || typeof row !== "object") {
-      return null;
-    }
+    const cached = localStorage.getItem("fosPortalData");
 
-    const cleaned = {
-
-      id: index,
-
-      ecode: safeText(getField(row, "ecode"), ""),
-
-      username: safeText(getField(row, "username"), ""),
-
-      doj: safeText(getField(row, "doj"), ""),
-
-      tl: safeText(getField(row, "tl"), ""),
-
-      zm: safeText(getField(row, "zm"), ""),
-
-      city: safeText(getField(row, "city"), ""),
-
-      zone: safeText(getField(row, "zone"), ""),
-
-      trainer: safeText(getField(row, "trainer"), ""),
-
-      batch: safeText(getField(row, "batch"), ""),
-
-      tenure: safeText(getField(row, "tenure"), ""),
-
-      date: safeText(getField(row, "date"), ""),
-
-      my: safeText(getField(row, "my"), ""),
-
-      appointment: safeNumber(getField(row, "appointment")),
-
-      visit: safeNumber(getField(row, "visit")),
-
-      booking: safeNumber(getField(row, "booking")),
-
-      ape: safeNumber(getField(row, "ape")),
-
-      original: row
-
-    };
-
-
-    // If ecode is missing, still keep the row
-    // because Google Sheet may have useful performance data
-
-    return cleaned;
-
-  } catch (error) {
-
-    console.warn("Skipping bad row:", error);
-
-    return null;
-
-  }
-
-}
-
-
-// ==========================================================
-// PARSE API RESPONSE SAFELY
-// ==========================================================
-
-function parseResponse(text) {
-
-  try {
-
-    if (!text) {
+    if (!cached) {
       return [];
     }
 
-
-    // First try normal JSON
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cached);
 
     if (Array.isArray(parsed)) {
       return parsed;
     }
 
-
-    // API may return { data: [...] }
-    if (parsed && Array.isArray(parsed.data)) {
-      return parsed.data;
-    }
-
-
-    // API may return { rows: [...] }
-    if (parsed && Array.isArray(parsed.rows)) {
-      return parsed.rows;
-    }
-
-
-    // API may return { result: [...] }
-    if (parsed && Array.isArray(parsed.result)) {
-      return parsed.result;
-    }
-
-
-    // If single object
-    if (parsed && typeof parsed === "object") {
-      return [parsed];
-    }
-
-
     return [];
 
   } catch (error) {
 
-    console.warn("Normal JSON parsing failed.");
+    return [];
 
   }
-
-
-  // Try extracting JSON array
-  try {
-
-    const start = text.indexOf("[");
-    const end = text.lastIndexOf("]");
-
-    if (start !== -1 && end !== -1 && end > start) {
-
-      const possibleJson = text.substring(start, end + 1);
-
-      const parsed = JSON.parse(possibleJson);
-
-      return Array.isArray(parsed) ? parsed : [];
-
-    }
-
-  } catch (error) {
-
-    console.warn("Array extraction failed.");
-
-  }
-
-
-  return [];
 
 }
 
 
 // ==========================================================
-// LOAD GOOGLE SHEETS DATA
+// STATUS
 // ==========================================================
 
-async function loadGoogleSheetData(showLoader = true) {
+function setStatus(message) {
+
+  const element = document.getElementById("dataStatus");
+
+  if (element) {
+    element.textContent = message;
+  }
+
+}
+
+
+function setRefreshLoading(loading) {
+
+  const refreshButton =
+    document.getElementById("refreshBtn");
+
+  const sideButton =
+    document.getElementById("refreshSidebar");
+
 
   if (loading) {
+
+    if (refreshButton) {
+      refreshButton.textContent = "⏳ Refreshing...";
+      refreshButton.disabled = true;
+    }
+
+    if (sideButton) {
+      sideButton.textContent = "⏳ Refreshing...";
+      sideButton.disabled = true;
+    }
+
+  } else {
+
+    if (refreshButton) {
+      refreshButton.textContent = "↻ Refresh";
+      refreshButton.disabled = false;
+    }
+
+    if (sideButton) {
+      sideButton.textContent = "↻ Refresh Data";
+      sideButton.disabled = false;
+    }
+
+  }
+
+}
+
+
+// ==========================================================
+// LOAD DATA FROM GOOGLE SHEETS
+// ==========================================================
+
+async function loadGoogleSheetData(showLoading = true) {
+
+  if (isLoading) {
     return;
   }
 
 
-  loading = true;
+  isLoading = true;
+
+
+  if (showLoading) {
+    setRefreshLoading(true);
+  }
+
+
+  setStatus("Connecting to Google Sheets...");
 
 
   try {
-
-    if (showLoader) {
-      showLoadingState(true);
-    }
-
-
-    console.log("Connecting to Google Sheets...");
-
 
     const controller = new AbortController();
 
@@ -465,11 +539,13 @@ async function loadGoogleSheetData(showLoader = true) {
 
 
     const response = await fetch(
-      GOOGLE_SHEET_API + "?t=" + Date.now(),
+      GOOGLE_SHEET_API +
+      "?t=" +
+      Date.now(),
       {
         method: "GET",
-        signal: controller.signal,
-        cache: "no-store"
+        cache: "no-store",
+        signal: controller.signal
       }
     );
 
@@ -480,7 +556,7 @@ async function loadGoogleSheetData(showLoader = true) {
     if (!response.ok) {
 
       throw new Error(
-        "Google Sheets returned status: " + response.status
+        "Server returned " + response.status
       );
 
     }
@@ -489,176 +565,122 @@ async function loadGoogleSheetData(showLoader = true) {
     const text = await response.text();
 
 
-    console.log(
-      "Google Sheet response received:",
-      text.substring(0, 500)
-    );
+    let data;
 
 
-    const data = parseResponse(text);
+    try {
 
+      data = JSON.parse(text);
+
+    } catch (error) {
+
+      console.error(
+        "Invalid JSON received:",
+        text.substring(0, 500)
+      );
+
+      throw new Error(
+        "Google Sheets did not return valid JSON"
+      );
+
+    }
+
+
+    // ======================================================
+    // HANDLE DIFFERENT RESPONSE FORMATS
+    // ======================================================
 
     if (!Array.isArray(data)) {
 
-      throw new Error("Response is not an array");
+      if (data && Array.isArray(data.data)) {
+        data = data.data;
+      }
+
+      else if (data && Array.isArray(data.rows)) {
+        data = data.rows;
+      }
+
+      else if (data && Array.isArray(data.result)) {
+        data = data.result;
+      }
+
+      else {
+        throw new Error(
+          "No data array found in Google Sheets response"
+        );
+      }
 
     }
 
 
-    // Clean rows individually
-    const cleanedData = [];
+    // ======================================================
+    // NORMALIZE DATA
+    // ======================================================
+
+    rawData = data
+      .filter(item => item && typeof item === "object")
+      .map(normalizeRecord);
 
 
-    data.forEach((row, index) => {
-
-      try {
-
-        const cleanedRow = cleanRow(row, index);
-
-        if (cleanedRow) {
-          cleanedData.push(cleanedRow);
-        }
-
-      } catch (rowError) {
-
-        console.warn(
-          "Error processing row " + index,
-          rowError
-        );
-
-      }
-
-    });
+    filteredData = [...rawData];
 
 
-    // Only replace old data if new data is valid
-    if (cleanedData.length > 0) {
+    saveToCache(rawData);
 
-      rawData = cleanedData;
+
+    setStatus(
+      "✓ " +
+      rawData.length +
+      " records loaded"
+    );
+
+
+    updateAllFilters();
+
+    applyFilters();
+
+  } catch (error) {
+
+    console.error("Data loading error:", error);
+
+
+    // Use cached data if available
+
+    const cachedData = loadFromCache();
+
+
+    if (cachedData.length > 0) {
+
+      rawData = cachedData;
 
       filteredData = [...rawData];
 
-      lastUpdated = new Date();
 
-      console.log(
-        "Successfully loaded rows:",
-        rawData.length
+      setStatus(
+        "⚠ Offline data: " +
+        rawData.length +
+        " records"
       );
 
 
-      // Update everything safely
-      safeUpdateDashboard();
+      updateAllFilters();
 
-      populateFilters();
-
-      showDataStatus(
-        "Loaded " + rawData.length + " records"
-      );
+      applyFilters();
 
     } else {
 
-      console.warn(
-        "No valid rows found. Keeping existing data."
-      );
+      setStatus("⚠ Unable to load data");
 
 
-      // Keep website alive with existing data
-      if (rawData.length === 0) {
-
-        rawData = [];
-        filteredData = [];
-
-        safeUpdateDashboard();
-
-      }
-
-
-      showDataStatus(
-        "No valid records received"
-      );
+      renderEmptyDashboard();
 
     }
-
-  } catch (error) {
-
-    console.error(
-      "Google Sheets loading error:",
-      error
-    );
-
-
-    // IMPORTANT:
-    // DO NOT BREAK THE WEBSITE
-
-    if (!rawData || rawData.length === 0) {
-
-      rawData = [];
-      filteredData = [];
-
-      safeUpdateDashboard();
-
-    }
-
-
-    showDataStatus(
-      "Unable to refresh data. Showing available data."
-    );
 
   } finally {
 
-    loading = false;
+    isLoading = false;
 
-    showLoadingState(false);
-
-  }
-
-}
-
-
-// ==========================================================
-// SAFE DASHBOARD UPDATE
-// ==========================================================
-
-function safeUpdateDashboard() {
-
-  try {
-
-    updateDashboard();
-
-  } catch (error) {
-
-    console.error(
-      "Dashboard update error:",
-      error
-    );
-
-  }
-
-
-  try {
-
-    updateEmployeeTable();
-
-  } catch (error) {
-
-    console.warn(
-      "Employee table update error:",
-      error
-    );
-
-  }
-
-
-  try {
-
-    updateCharts();
-
-  } catch (error) {
-
-    console.warn(
-      "Chart update error:",
-      error
-    );
+    setRefreshLoading(false);
 
   }
 
@@ -666,308 +688,160 @@ function safeUpdateDashboard() {
 
 
 // ==========================================================
-// CALCULATE DASHBOARD
+// UPDATE FILTER DROPDOWNS
 // ==========================================================
 
-function updateDashboard() {
+function populateSelect(id, values, defaultText) {
 
-  try {
+  const select = document.getElementById(id);
 
-    const data = safeArray(filteredData);
-
-
-    const uniqueEmployees = new Set(
-      data
-        .map(row => row.ecode)
-        .filter(value => value)
-    );
+  if (!select) {
+    return;
+  }
 
 
-    const totalAppointments = data.reduce(
-      (sum, row) =>
-        sum + safeNumber(row.appointment),
-      0
-    );
+  const currentValue = select.value;
 
 
-    const totalVisits = data.reduce(
-      (sum, row) =>
-        sum + safeNumber(row.visit),
-      0
-    );
+  select.innerHTML =
+    `<option value="">${defaultText}</option>`;
 
 
-    const totalBookings = data.reduce(
-      (sum, row) =>
-        sum + safeNumber(row.booking),
-      0
-    );
+  values.forEach(value => {
+
+    const option =
+      document.createElement("option");
+
+    option.value = value;
+
+    option.textContent = value;
+
+    select.appendChild(option);
+
+  });
 
 
-    const totalAPE = data.reduce(
-      (sum, row) =>
-        sum + safeNumber(row.ape),
-      0
-    );
+  if (
+    currentValue &&
+    values.includes(currentValue)
+  ) {
 
-
-    const appointmentConversion =
-      totalAppointments > 0
-        ? (totalBookings / totalAppointments) * 100
-        : 0;
-
-
-    const visitConversion =
-      totalVisits > 0
-        ? (totalBookings / totalVisits) * 100
-        : 0;
-
-
-    // Update cards using multiple possible IDs
-
-    setValue(
-      ["activeEmployees", "activeRMs", "totalEmployees"],
-      uniqueEmployees.size
-    );
-
-
-    setValue(
-      ["totalAppointments", "appointments"],
-      formatNumber(totalAppointments)
-    );
-
-
-    setValue(
-      ["totalVisits", "visits"],
-      formatNumber(totalVisits)
-    );
-
-
-    setValue(
-      ["totalBookings", "bookings"],
-      formatNumber(totalBookings)
-    );
-
-
-    setValue(
-      ["totalAPE", "ape"],
-      formatCurrency(totalAPE)
-    );
-
-
-    setValue(
-      ["visitBooking", "visitConversion"],
-      visitConversion.toFixed(1) + "%"
-    );
-
-
-    setValue(
-      ["appointmentConversion", "appointmentConv"],
-      appointmentConversion.toFixed(1) + "%"
-    );
-
-
-    updateLastUpdated();
-
-  } catch (error) {
-
-    console.error(
-      "Error updating dashboard:",
-      error
-    );
+    select.value = currentValue;
 
   }
 
 }
 
 
-// ==========================================================
-// SET VALUE SAFELY
-// ==========================================================
+function updateAllFilters() {
 
-function setValue(ids, value) {
-
-  try {
-
-    ids.forEach(id => {
-
-      const element =
-        document.getElementById(id);
-
-      if (element) {
-        element.textContent = value;
-      }
-
-    });
-
-  } catch (error) {
-
-    console.warn(
-      "Could not update value:",
-      error
-    );
-
-  }
-
-}
+  populateSelect(
+    "zoneFilter",
+    uniqueValues(rawData, "zone"),
+    "All Zones"
+  );
 
 
-// ==========================================================
-// FORMATTERS
-// ==========================================================
-
-function formatNumber(number) {
-
-  try {
-
-    return safeNumber(number)
-      .toLocaleString("en-IN");
-
-  } catch (error) {
-
-    return "0";
-
-  }
-
-}
+  populateSelect(
+    "cityFilter",
+    uniqueValues(rawData, "city"),
+    "All Cities"
+  );
 
 
-function formatCurrency(number) {
-
-  try {
-
-    const value = safeNumber(number);
-
-    if (value >= 10000000) {
-
-      return "₹" +
-        (value / 10000000)
-          .toFixed(2) +
-        " Cr";
-
-    }
+  populateSelect(
+    "tlFilter",
+    uniqueValues(rawData, "tl"),
+    "All TLs"
+  );
 
 
-    if (value >= 100000) {
-
-      return "₹" +
-        (value / 100000)
-          .toFixed(2) +
-        " L";
-
-    }
+  populateSelect(
+    "zmFilter",
+    uniqueValues(rawData, "zm"),
+    "All ZMs"
+  );
 
 
-    return "₹" +
-      value.toLocaleString("en-IN");
-
-  } catch (error) {
-
-    return "₹0";
-
-  }
+  populateSelect(
+    "trainerFilter",
+    uniqueValues(rawData, "trainer"),
+    "All Trainers"
+  );
 
 }
 
 
 // ==========================================================
-// FILTERS
+// APPLY FILTERS
 // ==========================================================
 
 function applyFilters() {
 
-  try {
+  const zone =
+    document.getElementById("zoneFilter")?.value || "";
 
-    const searchValue =
-      getInputValue(
-        ["searchInput", "searchRM", "searchEmployee"]
-      )
-      .toLowerCase();
+  const city =
+    document.getElementById("cityFilter")?.value || "";
 
+  const tl =
+    document.getElementById("tlFilter")?.value || "";
 
-    const zoneValue =
-      getInputValue(["zoneFilter"]);
+  const zm =
+    document.getElementById("zmFilter")?.value || "";
 
-
-    const cityValue =
-      getInputValue(["cityFilter"]);
-
-
-    const tlValue =
-      getInputValue(["tlFilter"]);
+  const trainer =
+    document.getElementById("trainerFilter")?.value || "";
 
 
-    const zmValue =
-      getInputValue(["zmFilter"]);
+  filteredData = rawData.filter(record => {
+
+    if (
+      zone &&
+      safeString(record.zone) !== zone
+    ) {
+      return false;
+    }
 
 
-    filteredData = rawData.filter(row => {
-
-      try {
-
-        const matchesSearch =
-          !searchValue ||
-          safeText(row.ecode, "")
-            .toLowerCase()
-            .includes(searchValue) ||
-
-          safeText(row.username, "")
-            .toLowerCase()
-            .includes(searchValue);
+    if (
+      city &&
+      safeString(record.city) !== city
+    ) {
+      return false;
+    }
 
 
-        const matchesZone =
-          !zoneValue ||
-          zoneValue === "All Zones" ||
-          row.zone === zoneValue;
+    if (
+      tl &&
+      safeString(record.tl) !== tl
+    ) {
+      return false;
+    }
 
 
-        const matchesCity =
-          !cityValue ||
-          cityValue === "All Cities" ||
-          row.city === cityValue;
+    if (
+      zm &&
+      safeString(record.zm) !== zm
+    ) {
+      return false;
+    }
 
 
-        const matchesTL =
-          !tlValue ||
-          tlValue === "All TLs" ||
-          row.tl === tlValue;
+    if (
+      trainer &&
+      safeString(record.trainer) !== trainer
+    ) {
+      return false;
+    }
 
 
-        const matchesZM =
-          !zmValue ||
-          zmValue === "All ZMs" ||
-          row.zm === zmValue;
+    return true;
+
+  });
 
 
-        return (
-          matchesSearch &&
-          matchesZone &&
-          matchesCity &&
-          matchesTL &&
-          matchesZM
-        );
-
-      } catch (error) {
-
-        // Bad row does not crash filtering
-        return false;
-
-      }
-
-    });
-
-
-    safeUpdateDashboard();
-
-  } catch (error) {
-
-    console.error(
-      "Filter error:",
-      error
-    );
-
-  }
+  renderDashboard();
 
 }
 
@@ -978,237 +852,831 @@ function applyFilters() {
 
 function clearFilters() {
 
-  try {
+  const filterIds = [
 
-    const ids = [
+    "zoneFilter",
+    "cityFilter",
+    "tlFilter",
+    "zmFilter",
+    "trainerFilter"
 
-      "searchInput",
-      "searchRM",
-      "searchEmployee"
+  ];
 
-    ];
 
+  filterIds.forEach(id => {
 
-    ids.forEach(id => {
-
-      const element =
-        document.getElementById(id);
-
-      if (element) {
-        element.value = "";
-      }
-
-    });
-
-
-    [
-      "zoneFilter",
-      "cityFilter",
-      "tlFilter",
-      "zmFilter"
-    ].forEach(id => {
-
-      const element =
-        document.getElementById(id);
-
-      if (element) {
-        element.selectedIndex = 0;
-      }
-
-    });
-
-
-    filteredData = [...rawData];
-
-    safeUpdateDashboard();
-
-  } catch (error) {
-
-    console.warn(
-      "Clear filter error:",
-      error
-    );
-
-  }
-
-}
-
-
-// ==========================================================
-// GET INPUT VALUE SAFELY
-// ==========================================================
-
-function getInputValue(ids) {
-
-  try {
-
-    for (const id of ids) {
-
-      const element =
-        document.getElementById(id);
-
-      if (element && element.value !== undefined) {
-        return String(element.value).trim();
-      }
-
-    }
-
-    return "";
-
-  } catch (error) {
-
-    return "";
-
-  }
-
-}
-
-
-// ==========================================================
-// POPULATE DROPDOWNS
-// ==========================================================
-
-function populateFilters() {
-
-  try {
-
-    populateSelect(
-      "zoneFilter",
-      getUniqueValues("zone"),
-      "All Zones"
-    );
-
-
-    populateSelect(
-      "cityFilter",
-      getUniqueValues("city"),
-      "All Cities"
-    );
-
-
-    populateSelect(
-      "tlFilter",
-      getUniqueValues("tl"),
-      "All TLs"
-    );
-
-
-    populateSelect(
-      "zmFilter",
-      getUniqueValues("zm"),
-      "All ZMs"
-    );
-
-
-    populateSelect(
-      "trainerFilter",
-      getUniqueValues("trainer"),
-      "All Trainers"
-    );
-
-  } catch (error) {
-
-    console.warn(
-      "Filter population error:",
-      error
-    );
-
-  }
-
-}
-
-
-function getUniqueValues(field) {
-
-  try {
-
-    return [
-      ...new Set(
-
-        rawData
-          .map(row =>
-            safeText(row[field], "")
-          )
-          .filter(value => value && value !== "-")
-
-      )
-
-    ].sort();
-
-  } catch (error) {
-
-    return [];
-
-  }
-
-}
-
-
-function populateSelect(id, values, defaultText) {
-
-  try {
-
-    const select =
+    const element =
       document.getElementById(id);
 
+    if (element) {
+      element.value = "";
+    }
 
-    if (!select) {
-      return;
+  });
+
+
+  applyFilters();
+
+}
+
+
+// ==========================================================
+// DASHBOARD CALCULATIONS
+// ==========================================================
+
+function calculateTotals(data) {
+
+  const totals = {
+
+    employees: 0,
+
+    appointments: 0,
+
+    visits: 0,
+
+    bookings: 0,
+
+    ape: 0
+
+  };
+
+
+  const employeeIds = new Set();
+
+
+  data.forEach(record => {
+
+    totals.appointments +=
+      numberValue(record.appointment);
+
+
+    totals.visits +=
+      numberValue(record.visit);
+
+
+    totals.bookings +=
+      numberValue(record.booking);
+
+
+    totals.ape +=
+      numberValue(record.ape);
+
+
+    // ECODE
+
+    if (record.ecode) {
+
+      employeeIds.add(record.ecode);
+
+    }
+
+    // USERNAME FALLBACK
+
+    else if (record.username) {
+
+      employeeIds.add(record.username);
+
+    }
+
+    // NAME FALLBACK
+
+    else if (record.name) {
+
+      employeeIds.add(record.name);
+
+    }
+
+  });
+
+
+  totals.employees =
+    employeeIds.size;
+
+
+  return totals;
+
+}
+
+
+// ==========================================================
+// RENDER DASHBOARD
+// ==========================================================
+
+function renderDashboard() {
+
+  const totals =
+    calculateTotals(filteredData);
+
+
+  const activeEmployees =
+    document.getElementById("activeEmployees");
+
+  const totalAppointments =
+    document.getElementById("totalAppointments");
+
+  const totalVisits =
+    document.getElementById("totalVisits");
+
+  const totalBookings =
+    document.getElementById("totalBookings");
+
+  const totalAPE =
+    document.getElementById("totalAPE");
+
+  const visitPercent =
+    document.getElementById("visitPercent");
+
+  const appointmentConversion =
+    document.getElementById("appointmentConversion");
+
+  const visitConversion =
+    document.getElementById("visitConversion");
+
+
+  if (activeEmployees) {
+    activeEmployees.textContent =
+      formatNumber(totals.employees);
+  }
+
+
+  if (totalAppointments) {
+    totalAppointments.textContent =
+      formatNumber(totals.appointments);
+  }
+
+
+  if (totalVisits) {
+    totalVisits.textContent =
+      formatNumber(totals.visits);
+  }
+
+
+  if (totalBookings) {
+    totalBookings.textContent =
+      formatNumber(totals.bookings);
+  }
+
+
+  if (totalAPE) {
+    totalAPE.textContent =
+      formatAPE(totals.ape);
+  }
+
+
+  const visitRate =
+    percentage(
+      totals.visits,
+      totals.appointments
+    );
+
+
+  const appointmentConv =
+    percentage(
+      totals.bookings,
+      totals.appointments
+    );
+
+
+  const visitConv =
+    percentage(
+      totals.bookings,
+      totals.visits
+    );
+
+
+  if (visitPercent) {
+    visitPercent.textContent =
+      formatPercent(visitRate) +
+      " visit rate";
+  }
+
+
+  if (appointmentConversion) {
+    appointmentConversion.textContent =
+      formatPercent(appointmentConv) +
+      " appointment conversion";
+  }
+
+
+  if (visitConversion) {
+    visitConversion.textContent =
+      formatPercent(visitConv);
+  }
+
+
+  renderTopEmployees();
+
+  renderZoneSummary();
+
+  renderZoneTable();
+
+  renderAllData();
+
+}
+
+
+// ==========================================================
+// TOP EMPLOYEES
+// ==========================================================
+
+function getEmployeeKey(record) {
+
+  if (record.ecode) {
+    return record.ecode;
+  }
+
+  if (record.username) {
+    return record.username;
+  }
+
+  if (record.name) {
+    return record.name;
+  }
+
+  return "Unknown";
+
+}
+
+
+function renderTopEmployees() {
+
+  const container =
+    document.getElementById("topEmployees");
+
+  if (!container) {
+    return;
+  }
+
+
+  if (filteredData.length === 0) {
+
+    container.innerHTML =
+      `<p class="empty-message">
+        No employee data available.
+      </p>`;
+
+    return;
+
+  }
+
+
+  const employees = {};
+
+
+  filteredData.forEach(record => {
+
+    const key =
+      getEmployeeKey(record);
+
+
+    if (!employees[key]) {
+
+      employees[key] = {
+
+        key: key,
+
+        name:
+          record.name ||
+          record.username ||
+          record.ecode ||
+          "Unknown",
+
+        zone: record.zone,
+
+        city: record.city,
+
+        ape: 0
+
+      };
+
     }
 
 
-    const currentValue =
-      select.value;
+    employees[key].ape +=
+      numberValue(record.ape);
+
+  });
 
 
-    select.innerHTML = "";
+  const topEmployees =
+    Object.values(employees)
+      .sort((a, b) => b.ape - a.ape)
+      .slice(0, 8);
 
 
-    const defaultOption =
-      document.createElement("option");
+  container.innerHTML =
+    topEmployees.map((employee, index) => {
 
-    defaultOption.value = "";
+      return `
 
-    defaultOption.textContent =
-      defaultText;
+        <div class="list-row">
+
+          <div>
+
+            <div class="list-name">
+              ${index + 1}. ${escapeHTML(employee.name)}
+            </div>
+
+            <div class="list-sub">
+              ${escapeHTML(employee.zone || "No Zone")}
+              ·
+              ${escapeHTML(employee.city || "No City")}
+            </div>
+
+          </div>
 
 
-    select.appendChild(defaultOption);
+          <div class="list-value">
+            ${formatAPE(employee.ape)}
+          </div>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
 
 
-    values.forEach(value => {
+// ==========================================================
+// ZONE SUMMARY
+// ==========================================================
 
-      const option =
-        document.createElement("option");
+function calculateZoneData() {
 
-      option.value = value;
+  const zones = {};
 
-      option.textContent = value;
 
-      select.appendChild(option);
+  filteredData.forEach(record => {
+
+    const zone =
+      record.zone || "Unassigned";
+
+
+    if (!zones[zone]) {
+
+      zones[zone] = {
+
+        zone: zone,
+
+        employees: new Set(),
+
+        appointments: 0,
+
+        visits: 0,
+
+        bookings: 0,
+
+        ape: 0
+
+      };
+
+    }
+
+
+    zones[zone].employees.add(
+      getEmployeeKey(record)
+    );
+
+
+    zones[zone].appointments +=
+      numberValue(record.appointment);
+
+
+    zones[zone].visits +=
+      numberValue(record.visit);
+
+
+    zones[zone].bookings +=
+      numberValue(record.booking);
+
+
+    zones[zone].ape +=
+      numberValue(record.ape);
+
+  });
+
+
+  return Object.values(zones)
+    .map(zone => {
+
+      return {
+
+        ...zone,
+
+        employeeCount:
+          zone.employees.size
+
+      };
+
+    })
+    .sort((a, b) => b.ape - a.ape);
+
+}
+
+
+function renderZoneSummary() {
+
+  const container =
+    document.getElementById("zoneSummary");
+
+  if (!container) {
+    return;
+  }
+
+
+  const zones =
+    calculateZoneData()
+      .slice(0, 8);
+
+
+  if (zones.length === 0) {
+
+    container.innerHTML =
+      `<p class="empty-message">
+        No zone data available.
+      </p>`;
+
+    return;
+
+  }
+
+
+  container.innerHTML =
+    zones.map(zone => {
+
+      return `
+
+        <div class="list-row">
+
+          <div>
+
+            <div class="list-name">
+              ${escapeHTML(zone.zone)}
+            </div>
+
+            <div class="list-sub">
+              ${zone.employeeCount} employees
+              ·
+              ${formatNumber(zone.bookings)} bookings
+            </div>
+
+          </div>
+
+
+          <div class="list-value">
+            ${formatAPE(zone.ape)}
+          </div>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
+
+
+// ==========================================================
+// ZONE TABLE
+// ==========================================================
+
+function renderZoneTable() {
+
+  const tbody =
+    document.getElementById("zoneTableBody");
+
+  if (!tbody) {
+    return;
+  }
+
+
+  const zones =
+    calculateZoneData();
+
+
+  if (zones.length === 0) {
+
+    tbody.innerHTML =
+      `<tr>
+        <td colspan="8">
+          No zone data available.
+        </td>
+      </tr>`;
+
+    return;
+
+  }
+
+
+  tbody.innerHTML =
+    zones.map(zone => {
+
+      const appointmentConversion =
+        percentage(
+          zone.bookings,
+          zone.appointments
+        );
+
+
+      const visitConversion =
+        percentage(
+          zone.bookings,
+          zone.visits
+        );
+
+
+      return `
+
+        <tr>
+
+          <td>
+            ${escapeHTML(zone.zone)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.employeeCount)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.appointments)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.visits)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.bookings)}
+          </td>
+
+          <td>
+            ${formatAPE(zone.ape)}
+          </td>
+
+          <td>
+            ${formatPercent(appointmentConversion)}
+          </td>
+
+          <td>
+            ${formatPercent(visitConversion)}
+          </td>
+
+        </tr>
+
+      `;
+
+    }).join("");
+
+}
+
+
+// ==========================================================
+// EMPLOYEE SEARCH
+// ==========================================================
+
+function searchEmployee() {
+
+  const input =
+    document.getElementById("employeeSearch");
+
+  if (!input) {
+    return;
+  }
+
+
+  const searchText =
+    normalizeText(input.value);
+
+
+  if (!searchText) {
+
+    alert(
+      "Please enter E-Code, Username or Employee Name."
+    );
+
+    return;
+
+  }
+
+
+  currentEmployeeData =
+    rawData.filter(record => {
+
+      return [
+
+        record.ecode,
+
+        record.username,
+
+        record.name
+
+      ].some(value =>
+
+        normalizeText(value)
+          .includes(searchText)
+
+      );
 
     });
 
 
-    // Restore previous selection if possible
+  renderEmployeeProfile();
 
-    if (
-      currentValue &&
-      values.includes(currentValue)
-    ) {
+  renderEmployeeTable();
 
-      select.value = currentValue;
+}
 
-    }
 
-  } catch (error) {
+// ==========================================================
+// EMPLOYEE PROFILE
+// ==========================================================
 
-    console.warn(
-      "Could not populate " + id,
-      error
-    );
+function renderEmployeeProfile() {
+
+  const container =
+    document.getElementById("employeeProfile");
+
+  if (!container) {
+    return;
+  }
+
+
+  if (currentEmployeeData.length === 0) {
+
+    container.innerHTML =
+      `<div class="empty-state">
+        No employee found.
+      </div>`;
+
+    return;
 
   }
+
+
+  const first =
+    currentEmployeeData[0];
+
+
+  const totals =
+    calculateTotals(
+      currentEmployeeData
+    );
+
+
+  const appointmentConv =
+    percentage(
+      totals.bookings,
+      totals.appointments
+    );
+
+
+  const visitConv =
+    percentage(
+      totals.bookings,
+      totals.visits
+    );
+
+
+  const tenure =
+    calculateTenure(first.doj);
+
+
+  container.innerHTML = `
+
+    <div class="profile-grid">
+
+      <div class="profile-item">
+        <label>Name</label>
+        <strong>
+          ${escapeHTML(first.name || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>E-Code</label>
+        <strong>
+          ${escapeHTML(first.ecode || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Username</label>
+        <strong>
+          ${escapeHTML(first.username || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Date of Joining</label>
+        <strong>
+          ${escapeHTML(first.doj || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Tenure</label>
+        <strong>
+          ${escapeHTML(tenure)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>TL</label>
+        <strong>
+          ${escapeHTML(first.tl || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>ZM</label>
+        <strong>
+          ${escapeHTML(first.zm || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Trainer</label>
+        <strong>
+          ${escapeHTML(first.trainer || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>City</label>
+        <strong>
+          ${escapeHTML(first.city || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Zone</label>
+        <strong>
+          ${escapeHTML(first.zone || "Not Available")}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Total Appointment</label>
+        <strong>
+          ${formatNumber(totals.appointments)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Total Visit</label>
+        <strong>
+          ${formatNumber(totals.visits)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Total Booking</label>
+        <strong>
+          ${formatNumber(totals.bookings)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Total APE</label>
+        <strong>
+          ${formatAPE(totals.ape)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Appointment Conversion</label>
+        <strong>
+          ${formatPercent(appointmentConv)}
+        </strong>
+      </div>
+
+
+      <div class="profile-item">
+        <label>Visit Conversion</label>
+        <strong>
+          ${formatPercent(visitConv)}
+        </strong>
+      </div>
+
+    </div>
+
+  `;
 
 }
 
@@ -1217,283 +1685,646 @@ function populateSelect(id, values, defaultText) {
 // EMPLOYEE TABLE
 // ==========================================================
 
-function updateEmployeeTable() {
+function renderEmployeeTable() {
 
-  try {
+  const tbody =
+    document.getElementById(
+      "employeeTableBody"
+    );
 
-    const tableBody =
-      document.querySelector(
-        "#employeeTableBody"
-      );
-
-
-    if (!tableBody) {
-      return;
-    }
+  if (!tbody) {
+    return;
+  }
 
 
-    tableBody.innerHTML = "";
+  if (currentEmployeeData.length === 0) {
+
+    tbody.innerHTML =
+      `<tr>
+        <td colspan="7">
+          No employee data available.
+        </td>
+      </tr>`;
+
+    return;
+
+  }
 
 
-    if (filteredData.length === 0) {
+  tbody.innerHTML =
+    currentEmployeeData.map(record => {
 
-      tableBody.innerHTML = `
+      const appointmentConv =
+        percentage(
+          record.booking,
+          record.appointment
+        );
+
+
+      const visitConv =
+        percentage(
+          record.booking,
+          record.visit
+        );
+
+
+      return `
+
         <tr>
-          <td colspan="15">
-            No data available
+
+          <td>
+            ${escapeHTML(record.date || "-")}
           </td>
+
+          <td>
+            ${formatNumber(record.appointment)}
+          </td>
+
+          <td>
+            ${formatNumber(record.visit)}
+          </td>
+
+          <td>
+            ${formatNumber(record.booking)}
+          </td>
+
+          <td>
+            ${formatAPE(record.ape)}
+          </td>
+
+          <td>
+            ${formatPercent(appointmentConv)}
+          </td>
+
+          <td>
+            ${formatPercent(visitConv)}
+          </td>
+
         </tr>
+
       `;
 
-      return;
+    }).join("");
 
-    }
-
-
-    filteredData.forEach(row => {
-
-      try {
-
-        const visitPercent =
-          row.appointment > 0
-            ? (
-                row.visit /
-                row.appointment *
-                100
-              ).toFixed(1)
-            : "0.0";
+}
 
 
-        const appointmentConversion =
-          row.appointment > 0
-            ? (
-                row.booking /
-                row.appointment *
-                100
-              ).toFixed(1)
-            : "0.0";
+// ==========================================================
+// TENURE
+// ==========================================================
+
+function calculateTenure(doj) {
+
+  if (!doj) {
+    return "Not Available";
+  }
 
 
-        const visitConversion =
-          row.visit > 0
-            ? (
-                row.booking /
-                row.visit *
-                100
-              ).toFixed(1)
-            : "0.0";
+  const date =
+    new Date(doj);
 
 
-        const tr =
-          document.createElement("tr");
+  if (Number.isNaN(date.getTime())) {
+    return "Not Available";
+  }
 
 
-        tr.innerHTML = `
+  const today =
+    new Date();
 
-          <td>${safeText(row.ecode)}</td>
 
-          <td>${safeText(row.username)}</td>
+  let months =
+    (today.getFullYear() -
+      date.getFullYear()) *
+    12;
 
-          <td>${safeText(row.doj)}</td>
 
-          <td>${safeText(row.tenure)}</td>
+  months +=
+    today.getMonth() -
+    date.getMonth();
 
-          <td>${safeText(row.tl)}</td>
 
-          <td>${safeText(row.zm)}</td>
+  if (months < 0) {
+    months = 0;
+  }
 
-          <td>${safeText(row.city)}</td>
 
-          <td>${safeText(row.zone)}</td>
+  const years =
+    Math.floor(months / 12);
 
-          <td>${safeText(row.trainer)}</td>
 
-          <td>${safeText(row.my)}</td>
+  const remainingMonths =
+    months % 12;
 
-          <td>${formatNumber(row.appointment)}</td>
 
-          <td>${formatNumber(row.visit)}</td>
+  if (years > 0) {
 
-          <td>${formatNumber(row.booking)}</td>
+    return (
+      years +
+      "y " +
+      remainingMonths +
+      "m"
+    );
 
-          <td>${formatCurrency(row.ape)}</td>
+  }
 
-          <td>${visitPercent}%</td>
 
-          <td>${appointmentConversion}%</td>
+  return (
+    remainingMonths +
+    " months"
+  );
 
-          <td>${visitConversion}%</td>
+}
+
+
+// ==========================================================
+// ALL DATA TABLE
+// ==========================================================
+
+function renderAllData() {
+
+  const head =
+    document.getElementById("allDataHead");
+
+  const body =
+    document.getElementById("allDataBody");
+
+  const count =
+    document.getElementById("recordCount");
+
+
+  if (!head || !body) {
+    return;
+  }
+
+
+  if (count) {
+
+    count.textContent =
+      filteredData.length;
+
+  }
+
+
+  if (rawData.length === 0) {
+
+    head.innerHTML = "";
+
+    body.innerHTML =
+      `<tr>
+        <td>No data available.</td>
+      </tr>`;
+
+    return;
+
+  }
+
+
+  // Use original Google Sheet columns
+
+  const allKeys =
+    new Set();
+
+
+  filteredData.forEach(record => {
+
+    Object.keys(
+      record.original || {}
+    ).forEach(key => {
+
+      if (key.trim() !== "") {
+        allKeys.add(key);
+      }
+
+    });
+
+  });
+
+
+  const columns =
+    Array.from(allKeys);
+
+
+  if (columns.length === 0) {
+
+    // Fallback normalized columns
+
+    columns.push(
+      "E-Code",
+      "Username",
+      "Name",
+      "DOJ",
+      "TL",
+      "ZM",
+      "City",
+      "Zone",
+      "Trainer",
+      "Date",
+      "Appointment",
+      "Visit",
+      "Booking",
+      "APE"
+    );
+
+  }
+
+
+  head.innerHTML =
+    `<tr>` +
+    columns.map(column =>
+
+      `<th>
+        ${escapeHTML(column)}
+      </th>`
+
+    ).join("") +
+    `</tr>`;
+
+
+  const maxRows =
+    Math.min(
+      filteredData.length,
+      500
+    );
+
+
+  body.innerHTML =
+    filteredData
+      .slice(0, maxRows)
+      .map(record => {
+
+        return `
+
+          <tr>
+
+            ${columns.map(column => {
+
+              let value =
+                record.original?.[column];
+
+
+              // Fallback normalized values
+
+              if (
+                value === undefined &&
+                column === "E-Code"
+              ) {
+                value = record.ecode;
+              }
+
+
+              if (
+                value === undefined &&
+                column === "Username"
+              ) {
+                value = record.username;
+              }
+
+
+              if (
+                value === undefined &&
+                column === "Name"
+              ) {
+                value = record.name;
+              }
+
+
+              return `
+
+                <td>
+                  ${escapeHTML(
+                    value === undefined
+                      ? ""
+                      : value
+                  )}
+                </td>
+
+              `;
+
+            }).join("")}
+
+          </tr>
 
         `;
 
+      }).join("");
 
-        tableBody.appendChild(tr);
 
-      } catch (rowError) {
+  if (
+    filteredData.length >
+    maxRows
+  ) {
 
-        console.warn(
-          "Table row error:",
-          rowError
+    body.innerHTML += `
+
+      <tr>
+
+        <td colspan="${columns.length}">
+
+          Showing first ${maxRows}
+          records out of
+          ${filteredData.length}.
+
+        </td>
+
+      </tr>
+
+    `;
+
+  }
+
+}
+
+
+// ==========================================================
+// GLOBAL SEARCH
+// ==========================================================
+
+function globalSearch() {
+
+  const input =
+    document.getElementById(
+      "globalSearch"
+    );
+
+  if (!input) {
+    return;
+  }
+
+
+  const searchText =
+    normalizeText(input.value);
+
+
+  if (!searchText) {
+
+    filteredData = [...rawData];
+
+    renderDashboard();
+
+    return;
+
+  }
+
+
+  filteredData =
+    rawData.filter(record => {
+
+      const values = [
+
+        record.ecode,
+
+        record.username,
+
+        record.name,
+
+        record.zone,
+
+        record.city,
+
+        record.tl,
+
+        record.zm,
+
+        record.trainer
+
+      ];
+
+
+      return values.some(value =>
+
+        normalizeText(value)
+          .includes(searchText)
+
+      );
+
+    });
+
+
+  renderDashboard();
+
+}
+
+
+// ==========================================================
+// NAVIGATION
+// ==========================================================
+
+function showPage(pageName) {
+
+  currentPage =
+    pageName;
+
+
+  const pages = {
+
+    dashboard: "dashboardPage",
+
+    employee: "employeePage",
+
+    zone: "zonePage",
+
+    data: "dataPage"
+
+  };
+
+
+  // Hide all pages
+
+  document.querySelectorAll(".page")
+    .forEach(page => {
+
+      page.classList.remove(
+        "active-page"
+      );
+
+    });
+
+
+  // Show selected page
+
+  const pageId =
+    pages[pageName];
+
+
+  const page =
+    document.getElementById(pageId);
+
+
+  if (page) {
+
+    page.classList.add(
+      "active-page"
+    );
+
+  }
+
+
+  // Update navigation
+
+  document.querySelectorAll(".nav-btn")
+    .forEach(button => {
+
+      button.classList.remove(
+        "active"
+      );
+
+
+      if (
+        button.dataset.page ===
+        pageName
+      ) {
+
+        button.classList.add(
+          "active"
         );
 
       }
 
     });
 
-  } catch (error) {
 
-    console.warn(
-      "Employee table error:",
-      error
-    );
+  updatePageTitle(pageName);
+
+
+  // Render data for selected page
+
+  if (pageName === "zone") {
+
+    renderZoneTable();
 
   }
+
+
+  if (pageName === "data") {
+
+    renderAllData();
+
+  }
+
+
+  // Scroll to top
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 
 }
 
 
 // ==========================================================
-// CHARTS
+// PAGE TITLES
 // ==========================================================
 
-function updateCharts() {
+function updatePageTitle(pageName) {
 
-  try {
+  const title =
+    document.getElementById(
+      "pageTitle"
+    );
 
-    // Charts can be added here.
-    // This function intentionally does nothing
-    // if Chart.js or chart elements are missing.
+  const subtitle =
+    document.getElementById(
+      "pageSubtitle"
+    );
 
-    if (typeof Chart === "undefined") {
 
-      console.log(
-        "Chart.js not available. Skipping charts."
-      );
+  const titles = {
 
-      return;
+    dashboard: {
+      title: "Performance Dashboard",
+      subtitle: "Live data from Google Sheets"
+    },
 
+    employee: {
+      title: "Employee Performance",
+      subtitle: "Analyse individual employee productivity"
+    },
+
+    zone: {
+      title: "Zone Comparison",
+      subtitle: "Compare business performance across zones"
+    },
+
+    data: {
+      title: "All Data",
+      subtitle: "Complete data from Google Sheets"
     }
 
-  } catch (error) {
+  };
 
-    console.warn(
-      "Chart error:",
-      error
-    );
 
+  const info =
+    titles[pageName];
+
+
+  if (!info) {
+    return;
+  }
+
+
+  if (title) {
+    title.textContent =
+      info.title;
+  }
+
+
+  if (subtitle) {
+    subtitle.textContent =
+      info.subtitle;
   }
 
 }
 
 
 // ==========================================================
-// LOADING STATE
+// EMPTY DASHBOARD
 // ==========================================================
 
-function showLoadingState(isLoading) {
+function renderEmptyDashboard() {
 
-  try {
+  const ids = [
 
-    const loader =
-      document.getElementById("loadingOverlay");
+    "activeEmployees",
 
+    "totalAppointments",
 
-    if (loader) {
+    "totalVisits",
 
-      loader.style.display =
-        isLoading ? "flex" : "none";
+    "totalBookings",
 
-    }
+    "totalAPE",
 
+    "visitConversion"
 
-    const refreshButtons =
-      document.querySelectorAll(
-        ".refresh-btn, #refreshBtn"
-      );
+  ];
 
 
-    refreshButtons.forEach(button => {
-
-      button.disabled = isLoading;
-
-    });
-
-  } catch (error) {
-
-    console.warn(
-      "Loading state error:",
-      error
-    );
-
-  }
-
-}
-
-
-// ==========================================================
-// DATA STATUS
-// ==========================================================
-
-function showDataStatus(message) {
-
-  try {
+  ids.forEach(id => {
 
     const element =
-      document.getElementById(
-        "dataStatus"
-      );
-
+      document.getElementById(id);
 
     if (element) {
-      element.textContent = message;
-    }
 
-  } catch (error) {
+      if (id === "totalAPE") {
+        element.textContent = "₹0";
+      }
 
-    // Do nothing
-  }
+      else if (
+        id === "visitConversion"
+      ) {
+        element.textContent = "0%";
+      }
 
-}
-
-
-// ==========================================================
-// LAST UPDATED
-// ==========================================================
-
-function updateLastUpdated() {
-
-  try {
-
-    const element =
-      document.getElementById(
-        "lastUpdated"
-      );
-
-
-    if (!element) {
-      return;
-    }
-
-
-    if (!lastUpdated) {
-
-      element.textContent =
-        "Last updated --";
-
-      return;
+      else {
+        element.textContent = "0";
+      }
 
     }
 
-
-    element.textContent =
-      "Last updated " +
-      lastUpdated.toLocaleTimeString();
-
-  } catch (error) {
-
-    // Do nothing
-
-  }
+  });
 
 }
 
@@ -1502,252 +2333,253 @@ function updateLastUpdated() {
 // EVENT LISTENERS
 // ==========================================================
 
-function initializeEvents() {
+function setupEventListeners() {
 
-  try {
+  // NAVIGATION
 
-    const searchInputs = [
+  document.querySelectorAll(".nav-btn")
+    .forEach(button => {
 
-      "searchInput",
-      "searchRM",
-      "searchEmployee"
-
-    ];
-
-
-    searchInputs.forEach(id => {
-
-      const element =
-        document.getElementById(id);
-
-
-      if (element) {
-
-        element.addEventListener(
-          "input",
-          debounce(applyFilters, 300)
-        );
-
-      }
-
-    });
-
-
-    [
-      "zoneFilter",
-      "cityFilter",
-      "tlFilter",
-      "zmFilter",
-      "trainerFilter"
-    ].forEach(id => {
-
-      const element =
-        document.getElementById(id);
-
-
-      if (element) {
-
-        element.addEventListener(
-          "change",
-          applyFilters
-        );
-
-      }
-
-    });
-
-
-    const refreshButton =
-      document.getElementById(
-        "refreshBtn"
-      );
-
-
-    if (refreshButton) {
-
-      refreshButton.addEventListener(
+      button.addEventListener(
         "click",
-        () => {
+        function () {
 
-          loadGoogleSheetData(true);
+          const pageName =
+            this.dataset.page;
+
+          showPage(pageName);
 
         }
       );
 
-    }
+    });
 
 
-    const clearButton =
-      document.getElementById(
-        "clearFiltersBtn"
-      );
+  // REFRESH BUTTON
 
-
-    if (clearButton) {
-
-      clearButton.addEventListener(
-        "click",
-        clearFilters
-      );
-
-    }
-
-  } catch (error) {
-
-    console.warn(
-      "Event initialization error:",
-      error
+  const refreshButton =
+    document.getElementById(
+      "refreshBtn"
     );
 
-  }
+  if (refreshButton) {
 
-}
-
-
-// ==========================================================
-// DEBOUNCE
-// ==========================================================
-
-function debounce(func, delay) {
-
-  let timer;
-
-
-  return function () {
-
-    try {
-
-      clearTimeout(timer);
-
-
-      timer =
-        setTimeout(() => {
-
-          try {
-
-            func();
-
-          } catch (error) {
-
-            console.warn(
-              "Debounced function error:",
-              error
-            );
-
-          }
-
-        }, delay);
-
-    } catch (error) {
-
-      // Do nothing
-
-    }
-
-  };
-
-}
-
-
-// ==========================================================
-// START WEBSITE
-// ==========================================================
-
-document.addEventListener(
-  "DOMContentLoaded",
-  function () {
-
-    try {
-
-      console.log(
-        "FOS Performance Portal starting..."
-      );
-
-
-      initializeEvents();
-
-
-      // Website loads immediately.
-      // Google Sheet loads in background.
-
-      safeUpdateDashboard();
-
-
-      setTimeout(() => {
+    refreshButton.addEventListener(
+      "click",
+      function () {
 
         loadGoogleSheetData(true);
 
-      }, 50);
+      }
+    );
 
-    } catch (error) {
+  }
 
-      console.error(
-        "Startup error:",
-        error
+
+  // SIDEBAR REFRESH
+
+  const refreshSidebar =
+    document.getElementById(
+      "refreshSidebar"
+    );
+
+  if (refreshSidebar) {
+
+    refreshSidebar.addEventListener(
+      "click",
+      function () {
+
+        loadGoogleSheetData(true);
+
+      }
+    );
+
+  }
+
+
+  // FILTERS
+
+  const filters = [
+
+    "zoneFilter",
+
+    "cityFilter",
+
+    "tlFilter",
+
+    "zmFilter",
+
+    "trainerFilter"
+
+  ];
+
+
+  filters.forEach(id => {
+
+    const element =
+      document.getElementById(id);
+
+    if (element) {
+
+      element.addEventListener(
+        "change",
+        applyFilters
       );
-
-
-      // WEBSITE SHOULD STILL REMAIN VISIBLE
 
     }
 
-  }
-);
+  });
 
 
-// ==========================================================
-// GLOBAL FUNCTIONS
-// For HTML buttons
-// ==========================================================
+  // CLEAR FILTERS
 
-window.refreshData = function () {
-
-  try {
-
-    loadGoogleSheetData(true);
-
-  } catch (error) {
-
-    console.error(error);
-
-  }
-
-};
-
-
-window.applyFilters = applyFilters;
-
-window.clearFilters = clearFilters;
-
-
-// ==========================================================
-// FINAL SAFETY NET
-// ==========================================================
-
-window.addEventListener(
-  "error",
-  function (event) {
-
-    console.warn(
-      "Website caught an error:",
-      event.message
+  const clearButton =
+    document.getElementById(
+      "clearFilters"
     );
 
-    // Prevent one JavaScript error
-    // from completely stopping future code
+  if (clearButton) {
 
-  }
-);
-
-
-window.addEventListener(
-  "unhandledrejection",
-  function (event) {
-
-    console.warn(
-      "Unhandled promise error:",
-      event.reason
+    clearButton.addEventListener(
+      "click",
+      clearFilters
     );
 
   }
-);
+
+
+  // GLOBAL SEARCH
+
+  const globalSearchInput =
+    document.getElementById(
+      "globalSearch"
+    );
+
+  if (globalSearchInput) {
+
+    globalSearchInput.addEventListener(
+      "input",
+      globalSearch
+    );
+
+  }
+
+
+  // EMPLOYEE SEARCH
+
+  const employeeSearchButton =
+    document.getElementById(
+      "employeeSearchBtn"
+    );
+
+  if (employeeSearchButton) {
+
+    employeeSearchButton.addEventListener(
+      "click",
+      searchEmployee
+    );
+
+  }
+
+
+  const employeeSearchInput =
+    document.getElementById(
+      "employeeSearch"
+    );
+
+  if (employeeSearchInput) {
+
+    employeeSearchInput.addEventListener(
+      "keydown",
+      function (event) {
+
+        if (
+          event.key === "Enter"
+        ) {
+
+          searchEmployee();
+
+        }
+
+      }
+    );
+
+  }
+
+}
+
+
+// ==========================================================
+// START APPLICATION
+// ==========================================================
+
+async function startApp() {
+
+  console.log(
+    "Starting FOS Performance Portal"
+  );
+
+
+  setupEventListeners();
+
+
+  // ========================================================
+  // LOAD CACHE FIRST
+  // This makes the portal open quickly
+  // ========================================================
+
+  const cachedData =
+    loadFromCache();
+
+
+  if (cachedData.length > 0) {
+
+    rawData =
+      cachedData;
+
+    filteredData =
+      [...rawData];
+
+
+    setStatus(
+      "✓ Cached data loaded"
+    );
+
+
+    updateAllFilters();
+
+    renderDashboard();
+
+  }
+
+
+  // ========================================================
+  // THEN LOAD FRESH GOOGLE SHEET DATA
+  // ========================================================
+
+  await loadGoogleSheetData(
+    cachedData.length === 0
+  );
+
+}
+
+
+// ==========================================================
+// DOM READY
+// ==========================================================
+
+if (
+  document.readyState ===
+  "loading"
+) {
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    startApp
+  );
+
+} else {
+
+  startApp();
+
+}

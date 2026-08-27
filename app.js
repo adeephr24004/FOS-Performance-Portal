@@ -1,3787 +1,827 @@
-/* =========================================================
-   FOS PERFORMANCE PORTAL
-   app.js
-========================================================= */
+// ==========================================
+// FOS PERFORMANCE PORTAL
+// GOOGLE SHEETS CONNECTION
+// ==========================================
 
-let allData = [];
-let filteredData = [];
-let currentPage = 1;
 
-const rowsPerPage = 15;
+// YOUR GOOGLE APPS SCRIPT WEB APP URL
 
-let charts = {
-  dailyTrend: null,
-  zonePerformance: null,
-  conversion: null,
-  dailyFull: null,
-  city: null,
-  zoneProductivity: null
-};
+const GOOGLE_SHEET_API =
+"https://script.google.com/a/macros/iimtrichy.ac.in/s/AKfycbzDBzHt8Pt5BEy1Z3Y-zDZ5S6qchbkaNSU06777Yv2T7OHluGtgsP9zoTH04onwer4/exec";
 
 
-/* =========================================================
-   SAFE DOM HELPERS
-========================================================= */
+// ==========================================
+// LOAD DATA WHEN WEBSITE OPENS
+// ==========================================
 
-function getElement(id) {
-  return document.getElementById(id);
-}
+document.addEventListener("DOMContentLoaded", function () {
 
-function on(id, event, callback) {
-  const element = getElement(id);
+    setTodayDate();
 
-  if (element) {
-    element.addEventListener(event, callback);
-  }
-}
+    loadGoogleSheetData();
 
+});
 
-/* =========================================================
-   INITIALIZATION
-========================================================= */
 
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
+// ==========================================
+// GET DATA FROM GOOGLE SHEET
+// ==========================================
 
-    initializeNavigation();
-    initializeEvents();
+async function loadGoogleSheetData() {
 
-    createDemoData();
+    try {
 
-    filteredData = [...allData];
+        console.log("Loading Google Sheet data...");
 
-    populateFilters();
+        const response = await fetch(GOOGLE_SHEET_API);
 
-    updateDashboard();
-
-  }
-);
-
-
-/* =========================================================
-   EVENTS
-========================================================= */
-
-function initializeEvents() {
-
-  on(
-    "uploadExcelBtn",
-    "click",
-    () => {
-      const input =
-        getElement("excelFileInput");
-
-      if (input) {
-        input.click();
-      }
-    }
-  );
-
-
-  on(
-    "excelFileInput",
-    "change",
-    handleExcelUpload
-  );
-
-
-  on(
-    "zoneFilter",
-    "change",
-    applyFilters
-  );
-
-
-  on(
-    "cityFilter",
-    "change",
-    applyFilters
-  );
-
-
-  on(
-    "teamFilter",
-    "change",
-    applyFilters
-  );
-
-
-  on(
-    "rmSearch",
-    "input",
-    applyFilters
-  );
-
-
-  on(
-    "clearFiltersButton",
-    "click",
-    clearFilters
-  );
-
-
-  on(
-    "refreshButton",
-    "click",
-    () => {
-
-      updateDashboard();
-
-      showToast(
-        "Dashboard refreshed successfully"
-      );
-
-    }
-  );
-
-
-  on(
-    "mobileMenuButton",
-    "click",
-    () => {
-
-      const sidebar =
-        document.querySelector(".sidebar");
-
-      if (sidebar) {
-        sidebar.classList.toggle("show");
-      }
-
-    }
-  );
-
-
-  on(
-    "viewLeaderboardButton",
-    "click",
-    () => {
-      navigateToPage("leaderboard");
-    }
-  );
-
-
-  on(
-    "showFullLeaderboardButton",
-    "click",
-    () => {
-      navigateToPage("leaderboard");
-    }
-  );
-
-
-  on(
-    "viewTopPerformerButton",
-    "click",
-    () => {
-
-      const sorted =
-        getSortedByAPE(filteredData);
-
-      if (sorted.length > 0) {
-        openRMModal(sorted[0]);
-      }
-
-    }
-  );
-
-
-  on(
-    "closeRmModal",
-    "click",
-    closeRMModal
-  );
-
-
-  on(
-    "rmModal",
-    "click",
-    (event) => {
-
-      if (
-        event.target.id ===
-        "rmModal"
-      ) {
-        closeRMModal();
-      }
-
-    }
-  );
-
-
-  on(
-    "performanceSearch",
-    "input",
-    renderPerformanceTable
-  );
-
-
-  on(
-    "performanceSort",
-    "change",
-    renderPerformanceTable
-  );
-
-
-  on(
-    "exportDashboardButton",
-    "click",
-    exportDashboardCSV
-  );
-
-
-  on(
-    "exportDataButton",
-    "click",
-    exportDataCSV
-  );
-
-}
-
-
-/* =========================================================
-   NAVIGATION
-========================================================= */
-
-function initializeNavigation() {
-
-  document
-    .querySelectorAll(".nav-item")
-    .forEach(
-      (item) => {
-
-        item.addEventListener(
-          "click",
-          () => {
-
-            navigateToPage(
-              item.dataset.page
-            );
-
-          }
-        );
-
-      }
-    );
-
-}
-
-
-function navigateToPage(pageName) {
-
-  document
-    .querySelectorAll(".nav-item")
-    .forEach(
-      (item) => {
-
-        item.classList.remove("active");
-
-        if (
-          item.dataset.page ===
-          pageName
-        ) {
-          item.classList.add("active");
+        if (!response.ok) {
+            throw new Error("Unable to load Google Sheet");
         }
 
-      }
-    );
+        const data = await response.json();
+
+        console.log("Google Sheet Data:", data);
 
 
-  document
-    .querySelectorAll(".page-section")
-    .forEach(
-      (page) => {
-        page.classList.remove(
-          "active-page"
+        // Update the website
+
+        updateDashboard(data);
+
+        updateRMTable(data);
+
+        updateTopPerformers(data);
+
+        updateZonePerformance(data);
+
+
+    } catch (error) {
+
+        console.error("Error loading data:", error);
+
+        alert(
+            "Unable to load the Google Sheet data. Please check the Apps Script deployment settings."
         );
-      }
-    );
 
-
-  const target =
-    getElement(
-      `${pageName}Page`
-    );
-
-
-  if (target) {
-    target.classList.add(
-      "active-page"
-    );
-  }
-
-
-  const titles = {
-
-    dashboard:
-      "Performance Dashboard",
-
-    performance:
-      "RM Performance",
-
-    leaderboard:
-      "FOS Leaderboard",
-
-    funnel:
-      "Sales Funnel",
-
-    daily:
-      "Daily Tracker",
-
-    team:
-      "Team Insights",
-
-    data:
-      "Data Explorer"
-
-  };
-
-
-  setText(
-    "pageTitle",
-    titles[pageName] ||
-    "FOS Performance Portal"
-  );
-
-
-  const sidebar =
-    document.querySelector(".sidebar");
-
-  if (sidebar) {
-    sidebar.classList.remove("show");
-  }
-
-
-  if (
-    pageName === "performance"
-  ) {
-    renderPerformanceTable();
-  }
-
-
-  if (
-    pageName === "leaderboard"
-  ) {
-    renderFullLeaderboard();
-  }
+    }
 
 }
 
 
-/* =========================================================
-   EXCEL UPLOAD
-========================================================= */
+// ==========================================
+// HELPER FUNCTION
+// CONVERT VALUES INTO NUMBERS
+// ==========================================
 
-async function handleExcelUpload(event) {
+function getNumber(value) {
 
-  const file =
-    event.target.files[0];
-
-  if (!file) {
-    return;
-  }
-
-
-  showLoading(true);
-
-
-  try {
-
-    if (
-      typeof XLSX ===
-      "undefined"
-    ) {
-
-      throw new Error(
-        "Excel library not loaded"
-      );
-
+    if (value === undefined || value === null || value === "") {
+        return 0;
     }
 
+    return Number(
+        String(value)
+            .replace(/₹/g, "")
+            .replace(/,/g, "")
+            .replace(/L/g, "")
+            .trim()
+    ) || 0;
 
-    const arrayBuffer =
-      await file.arrayBuffer();
+}
 
 
-    const workbook =
-      XLSX.read(
-        arrayBuffer,
-        {
-          type: "array",
-          cellDates: true
+// ==========================================
+// FIND COLUMN VALUE
+// Supports slightly different column names
+// ==========================================
+
+function getValue(row, possibleNames) {
+
+    for (let name of possibleNames) {
+
+        if (row[name] !== undefined) {
+            return row[name];
         }
-      );
-
-
-    const data =
-      extractDataFromWorkbook(
-        workbook
-      );
-
-
-    if (
-      data.length === 0
-    ) {
-
-      throw new Error(
-        "No usable data found"
-      );
 
     }
 
-
-    allData =
-      data;
-
-
-    filteredData =
-      [...allData];
-
-
-    currentPage = 1;
-
-
-    populateFilters();
-
-
-    updateDashboard();
-
-
-    updateDataExplorer();
-
-
-    setText(
-      "dataStatus",
-      "Excel Data Loaded"
-    );
-
-
-    setText(
-      "dataStatusText",
-      file.name
-    );
-
-
-    setText(
-      "lastUpdated",
-      `Updated: ${new Date().toLocaleString()}`
-    );
-
-
-    showToast(
-      `${allData.length} RM records loaded successfully`
-    );
-
-  } catch (error) {
-
-    console.error(error);
-
-    showToast(
-      "Unable to process this Excel file"
-    );
-
-  } finally {
-
-    showLoading(false);
-
-    event.target.value = "";
-
-  }
-
-}
-
-
-/* =========================================================
-   EXCEL DATA EXTRACTION
-========================================================= */
-
-function extractDataFromWorkbook(workbook) {
-
-  let bestRows = [];
-
-
-  workbook.SheetNames.forEach(
-    (sheetName) => {
-
-      const sheet =
-        workbook.Sheets[sheetName];
-
-
-      const rows =
-        XLSX.utils.sheet_to_json(
-          sheet,
-          {
-            defval: "",
-            raw: false
-          }
-        );
-
-
-      if (
-        rows.length >
-        bestRows.length
-      ) {
-
-        bestRows =
-          rows;
-
-      }
-
-    }
-  );
-
-
-  const normalized =
-    bestRows
-      .map(normalizeRow)
-      .filter(
-        (row) =>
-          row.name ||
-          row.ecode
-      );
-
-
-  return mergeDuplicateRMs(
-    normalized
-  );
-
-}
-
-
-function normalizeRow(row) {
-
-  const keys = {};
-
-
-  Object.keys(row).forEach(
-    (key) => {
-
-      keys[
-        normalizeKey(key)
-      ] =
-        row[key];
-
-    }
-  );
-
-
-  return {
-
-    name:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "username",
-            "name",
-            "salesagent",
-            "user",
-            "lastname"
-          ]
-        )
-      ) ||
-      "Unknown RM",
-
-
-    ecode:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "ecode",
-            "employeeid",
-            "employee"
-          ]
-        )
-      ),
-
-
-    tl:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "tl",
-            "teamleader",
-            "manager"
-          ]
-        )
-      ) ||
-      "Unassigned",
-
-
-    zone:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "zone",
-            "zoneofcity"
-          ]
-        )
-      ) ||
-      "Unassigned",
-
-
-    city:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "city",
-            "mastercity"
-          ]
-        )
-      ) ||
-      "Unassigned",
-
-
-    team:
-      cleanValue(
-        firstAvailable(
-          keys,
-          [
-            "team",
-            "usergroupname",
-            "group"
-          ]
-        )
-      ) ||
-      "Unassigned",
-
-
-    appointments:
-      getNumberFromKeys(
-        keys,
-        [
-          "appointments",
-          "appointment",
-          "appt",
-          "count"
-        ]
-      ),
-
-
-    visits:
-      getNumberFromKeys(
-        keys,
-        [
-          "visits",
-          "visit",
-          "visitcount"
-        ]
-      ),
-
-
-    bookings:
-      getNumberFromKeys(
-        keys,
-        [
-          "bookings",
-          "booking",
-          "bookingcount",
-          "plancount"
-        ]
-      ),
-
-
-    ape:
-      getNumberFromKeys(
-        keys,
-        [
-          "ape",
-          "annualpremium",
-          "premium"
-        ]
-      )
-
-  };
-
-}
-
-
-function normalizeKey(key) {
-
-  return String(key)
-    .toLowerCase()
-    .replace(
-      /[^a-z0-9]/g,
-      ""
-    );
-
-}
-
-
-function firstAvailable(
-  object,
-  keys
-) {
-
-  for (
-    const key of keys
-  ) {
-
-    if (
-      object[key] !==
-      undefined
-    ) {
-
-      const value =
-        object[key];
-
-      if (
-        value !== "" &&
-        value !== null
-      ) {
-
-        return value;
-
-      }
-
-    }
-
-  }
-
-  return "";
-
-}
-
-
-function getNumberFromKeys(
-  object,
-  keys
-) {
-
-  for (
-    const key of keys
-  ) {
-
-    if (
-      object[key] !==
-      undefined &&
-      object[key] !== ""
-    ) {
-
-      return toNumber(
-        object[key]
-      );
-
-    }
-
-  }
-
-  return 0;
-
-}
-
-
-function cleanValue(value) {
-
-  if (
-    value === null ||
-    value === undefined
-  ) {
     return "";
-  }
-
-  return String(value).trim();
 
 }
 
 
-function toNumber(value) {
+// ==========================================
+// UPDATE DASHBOARD CARDS
+// ==========================================
 
-  if (
-    typeof value ===
-    "number"
-  ) {
-    return value;
-  }
+function updateDashboard(data) {
 
-
-  const cleaned =
-    String(value || "")
-      .replace(
-        /[₹,\s]/g,
-        ""
-      )
-      .replace(
-        /[^0-9.-]/g,
-        ""
-      );
+    if (!data || data.length === 0) {
+        return;
+    }
 
 
-  const number =
-    Number(cleaned);
+    // TOTAL RMS
 
-  return isNaN(number)
-    ? 0
-    : number;
-
-}
+    const totalRMs = data.length;
 
 
-/* =========================================================
-   MERGE DUPLICATES
-========================================================= */
+    // TOTAL VISITS
 
-function mergeDuplicateRMs(data) {
+    const totalVisits = data.reduce((total, row) => {
 
-  const grouped =
-    new Map();
-
-
-  data.forEach(
-    (row) => {
-
-      const key =
-        row.ecode ||
-        `${row.name}-${row.city}`;
-
-
-      if (
-        !grouped.has(key)
-      ) {
-
-        grouped.set(
-          key,
-          { ...row }
+        return total + getNumber(
+            getValue(row, ["Visits", "Visit"])
         );
 
-      } else {
-
-        const existing =
-          grouped.get(key);
+    }, 0);
 
 
-        existing.appointments +=
-          row.appointments;
+    // TOTAL BOOKINGS
 
-        existing.visits +=
-          row.visits;
+    const totalBookings = data.reduce((total, row) => {
 
-        existing.bookings +=
-          row.bookings;
+        return total + getNumber(
+            getValue(row, ["Bookings", "Booking"])
+        );
 
-        existing.ape +=
-          row.ape;
+    }, 0);
 
-      }
+
+    // CONVERSION RATE
+
+    const conversionRate =
+        totalVisits > 0
+            ? ((totalBookings / totalVisits) * 100).toFixed(1)
+            : 0;
+
+
+    // FIND STAT CARDS
+
+    const statCards =
+        document.querySelectorAll(".stat-card");
+
+
+    if (statCards.length >= 4) {
+
+        // Total RMs
+
+        statCards[0]
+            .querySelector("h2")
+            .textContent = totalRMs;
+
+
+        // Total Bookings
+
+        statCards[1]
+            .querySelector("h2")
+            .textContent = totalBookings;
+
+
+        // Total Visits
+
+        statCards[2]
+            .querySelector("h2")
+            .textContent = totalVisits;
+
+
+        // Conversion Rate
+
+        statCards[3]
+            .querySelector("h2")
+            .textContent =
+            conversionRate + "%";
 
     }
-  );
-
-
-  return Array.from(
-    grouped.values()
-  );
 
 }
 
 
-/* =========================================================
-   DEMO DATA
-========================================================= */
+// ==========================================
+// UPDATE RM TRACKER TABLE
+// ==========================================
 
-function createDemoData() {
+function updateRMTable(data) {
 
-  const names = [
-    "Amit Sharma",
-    "Rahul Verma",
-    "Priya Singh",
-    "Neha Gupta",
-    "Rohit Kumar",
-    "Anjali Das",
-    "Vikas Yadav",
-    "Sneha Roy",
-    "Arjun Mehta",
-    "Pooja Nair",
-    "Karan Malhotra",
-    "Riya Kapoor",
-    "Manish Jain",
-    "Shreya Paul",
-    "Abhishek Singh",
-    "Nisha Sharma",
-    "Saurabh Gupta",
-    "Kritika Jain",
-    "Aakash Verma",
-    "Deepak Kumar"
-  ];
+    const table =
+        document.getElementById("rmTable");
 
 
-  const zones = [
-    "North",
-    "South",
-    "East",
-    "West",
-    "Central"
-  ];
+    if (!table) {
+        return;
+    }
 
 
-  const cities = [
-    "Delhi",
-    "Gurgaon",
-    "Mumbai",
-    "Bengaluru",
-    "Kolkata",
-    "Pune",
-    "Chennai",
-    "Noida"
-  ];
+    const tbody =
+        table.querySelector("tbody");
 
 
-  allData =
-    names.map(
-      (name, index) => {
+    tbody.innerHTML = "";
 
-        const appointments =
-          45 +
-          Math.floor(
-            Math.random() * 140
-          );
+
+    data.forEach(row => {
+
+
+        const rmName = getValue(
+            row,
+            ["RM Name", "RM", "Name"]
+        );
+
+
+        const zone = getValue(
+            row,
+            ["Zone"]
+        );
 
 
         const visits =
-          Math.floor(
-            appointments *
-            (
-              0.45 +
-              Math.random() * 0.35
-            )
-          );
+            getNumber(
+                getValue(row, ["Visits", "Visit"])
+            );
+
+
+        const appointments =
+            getNumber(
+                getValue(
+                    row,
+                    ["Appointments", "Appointment"]
+                )
+            );
 
 
         const bookings =
-          Math.floor(
-            visits *
-            (
-              0.15 +
-              Math.random() * 0.30
-            )
-          );
+            getNumber(
+                getValue(
+                    row,
+                    ["Bookings", "Booking"]
+                )
+            );
 
 
         const ape =
-          bookings *
-          (
-            12000 +
-            Math.floor(
-              Math.random() * 28000
-            )
-          );
+            getValue(row, ["APE"]);
 
 
-        return {
+        const ats =
+            getValue(row, ["ATS"]);
 
-          name,
 
-          ecode:
-            `FOS${1000 + index}`,
+        const conversion =
+            visits > 0
+                ? ((bookings / visits) * 100)
+                    .toFixed(1)
+                : 0;
 
-          tl:
-            `TL ${
-              Math.floor(
-                index / 5
-              ) + 1
-            }`,
 
-          zone:
-            zones[
-              index %
-              zones.length
-            ],
+        const tr =
+            document.createElement("tr");
 
-          city:
-            cities[
-              index %
-              cities.length
-            ],
 
-          team:
-            `Team ${
-              (index % 4) + 1
-            }`,
+        tr.innerHTML = `
 
-          appointments,
-          visits,
-          bookings,
-          ape
+            <td>${rmName}</td>
 
-        };
+            <td>${zone}</td>
 
-      }
-    );
+            <td>${visits}</td>
+
+            <td>${appointments}</td>
+
+            <td>${bookings}</td>
+
+            <td>${formatCurrency(ape)}</td>
+
+            <td>${formatCurrency(ats)}</td>
+
+            <td>
+                <span class="success">
+                    ${conversion}%
+                </span>
+            </td>
+
+        `;
+
+
+        tbody.appendChild(tr);
+
+
+    });
 
 }
 
 
-/* =========================================================
-   FILTERS
-========================================================= */
+// ==========================================
+// UPDATE TOP PERFORMERS TABLE
+// ==========================================
 
-function populateFilters() {
-
-  populateSelect(
-    "zoneFilter",
-    uniqueValues(
-      allData.map(
-        (row) =>
-          row.zone
-      )
-    ),
-    "All Zones"
-  );
+function updateTopPerformers(data) {
 
 
-  populateSelect(
-    "cityFilter",
-    uniqueValues(
-      allData.map(
-        (row) =>
-          row.city
-      )
-    ),
-    "All Cities"
-  );
+    // Create a copy and calculate conversion
+
+    const performers =
+        data.map(row => {
 
 
-  populateSelect(
-    "teamFilter",
-    uniqueValues(
-      allData.map(
-        (row) =>
-          row.team
-      )
-    ),
-    "All Teams"
-  );
-
-}
+            const visits =
+                getNumber(
+                    getValue(
+                        row,
+                        ["Visits", "Visit"]
+                    )
+                );
 
 
-function populateSelect(
-  id,
-  values,
-  defaultText
-) {
-
-  const select =
-    getElement(id);
-
-  if (!select) {
-    return;
-  }
+            const bookings =
+                getNumber(
+                    getValue(
+                        row,
+                        ["Bookings", "Booking"]
+                    )
+                );
 
 
-  select.innerHTML =
-    `<option value="all">${defaultText}</option>`;
+            const conversion =
+                visits > 0
+                    ? (bookings / visits) * 100
+                    : 0;
 
 
-  values
-    .sort()
-    .forEach(
-      (value) => {
+            return {
 
-        const option =
-          document.createElement(
-            "option"
-          );
+                ...row,
 
-        option.value =
-          value;
+                visits,
 
-        option.textContent =
-          value;
+                bookings,
 
-        select.appendChild(
-          option
-        );
+                conversion
 
-      }
-    );
+            };
 
-}
+        });
 
 
-function uniqueValues(array) {
+    // Sort by bookings first
 
-  return [
-    ...new Set(
-      array.filter(Boolean)
-    )
-  ];
+    performers.sort((a, b) => {
 
-}
+        return b.bookings - a.bookings;
+
+    });
 
 
-function applyFilters() {
+    // Get top 5
 
-  const zone =
-    getElement("zoneFilter")
-      ?.value ||
-    "all";
+    const topFive =
+        performers.slice(0, 5);
 
 
-  const city =
-    getElement("cityFilter")
-      ?.value ||
-    "all";
+    // The first table on dashboard
+
+    const tables =
+        document.querySelectorAll("table");
 
 
-  const team =
-    getElement("teamFilter")
-      ?.value ||
-    "all";
-
-
-  const search =
-    (
-      getElement("rmSearch")
-        ?.value ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-
-
-  filteredData =
-    allData.filter(
-      (row) => {
-
-        const searchable =
-          [
-            row.name,
-            row.ecode,
-            row.tl,
-            row.city,
-            row.zone
-          ]
-            .join(" ")
-            .toLowerCase();
-
-
-        return (
-
-          (
-            zone === "all" ||
-            row.zone === zone
-          ) &&
-
-          (
-            city === "all" ||
-            row.city === city
-          ) &&
-
-          (
-            team === "all" ||
-            row.team === team
-          ) &&
-
-          (
-            !search ||
-            searchable.includes(
-              search
-            )
-          )
-
-        );
-
-      }
-    );
-
-
-  currentPage = 1;
-
-  updateDashboard();
-
-}
-
-
-function clearFilters() {
-
-  [
-    "zoneFilter",
-    "cityFilter",
-    "teamFilter"
-  ].forEach(
-    (id) => {
-
-      const element =
-        getElement(id);
-
-      if (element) {
-        element.value = "all";
-      }
-
+    if (tables.length === 0) {
+        return;
     }
-  );
 
 
-  const search =
-    getElement("rmSearch");
-
-  if (search) {
-    search.value = "";
-  }
+    const topTable =
+        tables[0];
 
 
-  filteredData =
-    [...allData];
-
-  currentPage = 1;
-
-  updateDashboard();
-
-  showToast(
-    "Filters cleared"
-  );
-
-}
+    const tbody =
+        topTable.querySelector("tbody");
 
 
-/* =========================================================
-   DASHBOARD UPDATE
-========================================================= */
-
-function updateDashboard() {
-
-  const metrics =
-    calculateMetrics(
-      filteredData
-    );
+    if (!tbody) {
+        return;
+    }
 
 
-  updateKPIs(metrics);
-
-  updateFunnel(metrics);
-
-  renderDailyTrendChart(
-    filteredData
-  );
-
-  renderZonePerformanceChart(
-    filteredData
-  );
-
-  renderConversionChart(
-    metrics
-  );
-
-  renderLeaderboardPreview(
-    filteredData
-  );
-
-  renderFullLeaderboard();
-
-  renderPerformanceTable();
-
-  renderFunnelPage(
-    metrics
-  );
-
-  renderDailyPage(
-    filteredData
-  );
-
-  renderTeamInsights(
-    filteredData
-  );
-
-  updateTopPerformer(
-    filteredData
-  );
-
-  updateDataExplorer();
-
-}
+    tbody.innerHTML = "";
 
 
-/* =========================================================
-   METRICS
-========================================================= */
-
-function calculateMetrics(data) {
-
-  const totalAppointments =
-    sum(data, "appointments");
-
-  const totalVisits =
-    sum(data, "visits");
-
-  const totalBookings =
-    sum(data, "bookings");
-
-  const totalAPE =
-    sum(data, "ape");
-
-  const activeRMs =
-    data.length;
+    topFive.forEach((row, index) => {
 
 
-  return {
+        const rank = index + 1;
 
-    totalAppointments,
 
-    totalVisits,
+        const rankClass =
+            rank === 1
+                ? "gold"
+                : rank === 2
+                ? "silver"
+                : rank === 3
+                ? "bronze"
+                : "";
 
-    totalBookings,
 
-    totalAPE,
+        const rmName =
+            getValue(
+                row,
+                ["RM Name", "RM", "Name"]
+            );
 
-    activeRMs,
 
-    visitRate:
-      percentage(
-        totalVisits,
-        totalAppointments
-      ),
+        const zone =
+            getValue(
+                row,
+                ["Zone"]
+            );
 
-    bookingConversion:
-      percentage(
-        totalBookings,
-        totalVisits
-      ),
 
-    overallConversion:
-      percentage(
-        totalBookings,
-        totalAppointments
-      ),
+        const tr =
+            document.createElement("tr");
 
-    avgAppointments:
-      activeRMs
-        ? totalAppointments /
-          activeRMs
-        : 0,
 
-    avgTicketSize:
-      totalBookings
-        ? totalAPE /
-          totalBookings
-        : 0
+        tr.innerHTML = `
 
-  };
+            <td>
+                <span class="rank ${rankClass}">
+                    ${rank}
+                </span>
+            </td>
+
+            <td>
+                <strong>${rmName}</strong>
+            </td>
+
+            <td>${zone}</td>
+
+            <td>${row.visits}</td>
+
+            <td>${row.bookings}</td>
+
+            <td>
+                <span class="success">
+                    ${row.conversion.toFixed(1)}%
+                </span>
+            </td>
+
+        `;
+
+
+        tbody.appendChild(tr);
+
+
+    });
 
 }
 
 
-function sum(data, property) {
+// ==========================================
+// UPDATE ZONE PERFORMANCE
+// ==========================================
 
-  return data.reduce(
-    (total, row) =>
-      total +
-      (
-        Number(
-          row[property]
-        ) || 0
-      ),
-    0
-  );
+function updateZonePerformance(data) {
 
-}
 
+    const zoneData = {};
 
-function percentage(
-  value,
-  total
-) {
 
-  if (!total) {
-    return 0;
-  }
+    data.forEach(row => {
 
-  return (
-    value /
-    total
-  ) * 100;
 
-}
+        const zone =
+            getValue(row, ["Zone"]);
 
 
-/* =========================================================
-   KPI UPDATE
-========================================================= */
-
-function updateKPIs(metrics) {
-
-  setText(
-    "totalAppointments",
-    formatNumber(
-      metrics.totalAppointments
-    )
-  );
-
-  setText(
-    "totalVisits",
-    formatNumber(
-      metrics.totalVisits
-    )
-  );
-
-  setText(
-    "totalBookings",
-    formatNumber(
-      metrics.totalBookings
-    )
-  );
-
-  setText(
-    "totalAPE",
-    formatCurrency(
-      metrics.totalAPE
-    )
-  );
-
-  setText(
-    "activeRMs",
-    formatNumber(
-      metrics.activeRMs
-    )
-  );
-
-  setText(
-    "avgAppointments",
-    formatNumber(
-      metrics.avgAppointments
-    )
-  );
-
-  setText(
-    "visitRate",
-    formatPercent(
-      metrics.visitRate
-    )
-  );
-
-  setText(
-    "bookingConversion",
-    formatPercent(
-      metrics.bookingConversion
-    )
-  );
-
-  setText(
-    "avgTicketSize",
-    formatCurrency(
-      metrics.avgTicketSize
-    )
-  );
-
-
-  const productivity =
-    metrics.activeRMs
-      ? metrics.totalBookings /
-        metrics.activeRMs
-      : 0;
-
-
-  setText(
-    "productivityScore",
-    `${productivity.toFixed(1)} BKG/RM`
-  );
-
-}
-
-
-/* =========================================================
-   FUNNEL
-========================================================= */
-
-function updateFunnel(metrics) {
-
-  setText(
-    "funnelAppointments",
-    formatNumber(
-      metrics.totalAppointments
-    )
-  );
-
-  setText(
-    "funnelVisits",
-    formatNumber(
-      metrics.totalVisits
-    )
-  );
-
-  setText(
-    "funnelBookings",
-    formatNumber(
-      metrics.totalBookings
-    )
-  );
-
-
-  setWidth(
-    "funnelAppointmentsBar",
-    100
-  );
-
-  setWidth(
-    "funnelVisitsBar",
-    percentage(
-      metrics.totalVisits,
-      metrics.totalAppointments
-    )
-  );
-
-  setWidth(
-    "funnelBookingsBar",
-    percentage(
-      metrics.totalBookings,
-      metrics.totalAppointments
-    )
-  );
-
-
-  setText(
-    "appointmentVisitConversion",
-    formatPercent(
-      percentage(
-        metrics.totalVisits,
-        metrics.totalAppointments
-      )
-    )
-  );
-
-
-  setText(
-    "visitBookingConversion",
-    formatPercent(
-      percentage(
-        metrics.totalBookings,
-        metrics.totalVisits
-      )
-    )
-  );
-
-
-  setText(
-    "overallConversion",
-    formatPercent(
-      metrics.overallConversion
-    )
-  );
-
-}
-
-
-/* =========================================================
-   CHARTS
-========================================================= */
-
-function destroyChart(name) {
-
-  if (charts[name]) {
-
-    charts[name].destroy();
-
-    charts[name] = null;
-
-  }
-
-}
-
-
-function renderDailyTrendChart(data) {
-
-  const canvas =
-    getElement("dailyTrendChart");
-
-  if (
-    !canvas ||
-    typeof Chart === "undefined"
-  ) {
-    return;
-  }
-
-
-  const trend =
-    generateDailyData(data);
-
-
-  destroyChart(
-    "dailyTrend"
-  );
-
-
-  charts.dailyTrend =
-    new Chart(
-      canvas,
-      {
-
-        type: "line",
-
-        data: {
-
-          labels:
-            trend.labels,
-
-          datasets: [
-
-            {
-              label: "Appointments",
-              data: trend.appointments,
-              borderColor: "#2563eb",
-              backgroundColor:
-                "rgba(37,99,235,0.08)",
-              tension: 0.4,
-              fill: true
-            },
-
-            {
-              label: "Visits",
-              data: trend.visits,
-              borderColor: "#8b5cf6",
-              tension: 0.4
-            },
-
-            {
-              label: "Bookings",
-              data: trend.bookings,
-              borderColor: "#10b981",
-              tension: 0.4
-            }
-
-          ]
-
-        },
-
-        options: {
-
-          responsive: true,
-          maintainAspectRatio: false,
-
-          plugins: {
-            legend: {
-              position: "bottom"
-            }
-          },
-
-          scales: {
-            x: {
-              grid: {
-                display: false
-              }
-            },
-            y: {
-              beginAtZero: true
-            }
-          }
-
+        if (!zone) {
+            return;
         }
 
-      }
-    );
 
-}
-
-
-function renderZonePerformanceChart(data) {
-
-  const canvas =
-    getElement(
-      "zonePerformanceChart"
-    );
-
-  if (
-    !canvas ||
-    typeof Chart === "undefined"
-  ) {
-    return;
-  }
-
-
-  const grouped =
-    groupBy(data, "zone");
-
-
-  const zones =
-    Object.keys(grouped);
-
-
-  const values =
-    zones.map(
-      (zone) =>
-        sum(
-          grouped[zone],
-          "ape"
-        )
-    );
-
-
-  destroyChart(
-    "zonePerformance"
-  );
-
-
-  charts.zonePerformance =
-    new Chart(
-      canvas,
-      {
-
-        type: "bar",
-
-        data: {
-
-          labels: zones,
-
-          datasets: [
-            {
-              label: "APE",
-              data: values,
-              backgroundColor:
-                "#2563eb",
-              borderRadius: 7
-            }
-          ]
-
-        },
-
-        options: {
-
-          responsive: true,
-          maintainAspectRatio: false,
-
-          plugins: {
-            legend: {
-              display: false
-            }
-          }
-
-        }
-
-      }
-    );
-
-}
-
-
-function renderConversionChart(metrics) {
-
-  const canvas =
-    getElement("conversionChart");
-
-  if (
-    !canvas ||
-    typeof Chart === "undefined"
-  ) {
-    return;
-  }
-
-
-  destroyChart(
-    "conversion"
-  );
-
-
-  charts.conversion =
-    new Chart(
-      canvas,
-      {
-
-        type: "doughnut",
-
-        data: {
-
-          labels: [
-            "Converted",
-            "Remaining"
-          ],
-
-          datasets: [
-            {
-              data: [
-                metrics.overallConversion,
-                Math.max(
-                  0,
-                  100 -
-                  metrics.overallConversion
+        const visits =
+            getNumber(
+                getValue(
+                    row,
+                    ["Visits", "Visit"]
                 )
-              ],
+            );
 
-              backgroundColor: [
-                "#10b981",
-                "#e5e7eb"
-              ],
 
-              borderWidth: 0
-            }
-          ]
+        const bookings =
+            getNumber(
+                getValue(
+                    row,
+                    ["Bookings", "Booking"]
+                )
+            );
 
-        },
 
-        options: {
+        if (!zoneData[zone]) {
 
-          responsive: true,
-          maintainAspectRatio: false,
+            zoneData[zone] = {
 
-          cutout: "70%",
+                visits: 0,
 
-          plugins: {
-            legend: {
-              position: "bottom"
-            }
-          }
+                bookings: 0
+
+            };
 
         }
 
-      }
-    );
+
+        zoneData[zone].visits += visits;
+
+        zoneData[zone].bookings += bookings;
+
+
+    });
+
+
+    const zoneCards =
+        document.querySelectorAll(".zone-card");
+
+
+    zoneCards.forEach(card => {
+
+
+        const zoneName =
+            card.querySelector("h4")
+                .textContent
+                .trim();
+
+
+        const zone =
+            zoneData[zoneName];
+
+
+        if (!zone) {
+            return;
+        }
+
+
+        const percentage =
+            zone.visits > 0
+                ? Math.round(
+                    (zone.bookings / zone.visits) * 100
+                )
+                : 0;
+
+
+        const progressBar =
+            card.querySelector(".progress-bar");
+
+
+        const percentageText =
+            card.querySelector("strong");
+
+
+        if (progressBar) {
+
+            progressBar.style.width =
+                percentage + "%";
+
+        }
+
+
+        if (percentageText) {
+
+            percentageText.textContent =
+                percentage + "%";
+
+        }
+
+
+    });
+
 
 }
 
 
-/* =========================================================
-   LEADERBOARD
-========================================================= */
+// ==========================================
+// SEARCH RM
+// ==========================================
 
-function getSortedByAPE(data) {
+function searchRM() {
 
-  return [...data].sort(
-    (a, b) =>
-      b.ape - a.ape
-  );
+    const input =
+        document.getElementById("rmSearch");
 
-}
 
-
-function renderLeaderboardPreview(data) {
-
-  const body =
-    getElement(
-      "leaderboardPreviewBody"
-    );
-
-  if (!body) {
-    return;
-  }
-
-
-  const sorted =
-    getSortedByAPE(data)
-      .slice(0, 8);
-
-
-  if (
-    sorted.length === 0
-  ) {
-
-    body.innerHTML = `
-      <tr>
-        <td colspan="9">
-          No performance data found.
-        </td>
-      </tr>
-    `;
-
-    return;
-
-  }
-
-
-  body.innerHTML =
-    sorted
-      .map(
-        (row, index) =>
-          leaderboardRowHTML(
-            row,
-            index + 1
-          )
-      )
-      .join("");
-
-}
-
-
-function leaderboardRowHTML(
-  row,
-  rank
-) {
-
-  const conversion =
-    percentage(
-      row.bookings,
-      row.visits
-    );
-
-
-  return `
-
-    <tr>
-
-      <td>
-        <span class="
-          rank-badge
-          ${rank <= 3 ? `rank-${rank}` : ""}
-        ">
-          ${rank}
-        </span>
-      </td>
-
-      <td>
-        <div class="rm-cell">
-
-          <div class="rm-table-avatar">
-            ${getInitials(row.name)}
-          </div>
-
-          <div>
-            <span class="rm-name">
-              ${escapeHTML(row.name)}
-            </span>
-
-            <span class="rm-subtext">
-              ${escapeHTML(row.ecode || "-")}
-            </span>
-          </div>
-
-        </div>
-      </td>
-
-      <td>${escapeHTML(row.zone)}</td>
-
-      <td>${escapeHTML(row.city)}</td>
-
-      <td>${formatNumber(row.appointments)}</td>
-
-      <td>${formatNumber(row.visits)}</td>
-
-      <td>${formatNumber(row.bookings)}</td>
-
-      <td class="metric-positive">
-        ${formatPercent(conversion)}
-      </td>
-
-      <td>
-        <strong>
-          ${formatCurrency(row.ape)}
-        </strong>
-      </td>
-
-    </tr>
-
-  `;
-
-}
-
-
-function renderFullLeaderboard() {
-
-  const body =
-    getElement(
-      "fullLeaderboardBody"
-    );
-
-  if (!body) {
-    return;
-  }
-
-
-  const sorted =
-    getSortedByAPE(
-      filteredData
-    );
-
-
-  setText(
-    "totalRanked",
-    formatNumber(
-      sorted.length
-    )
-  );
-
-
-  body.innerHTML =
-    sorted
-      .map(
-        (row, index) => `
-
-          <tr>
-
-            <td>
-              <span class="
-                rank-badge
-                ${index < 3 ? `rank-${index + 1}` : ""}
-              ">
-                ${index + 1}
-              </span>
-            </td>
-
-            <td>
-              <div class="rm-cell">
-
-                <div class="rm-table-avatar">
-                  ${getInitials(row.name)}
-                </div>
-
-                <div>
-
-                  <span class="rm-name">
-                    ${escapeHTML(row.name)}
-                  </span>
-
-                  <span class="rm-subtext">
-                    ${escapeHTML(row.ecode || "-")}
-                  </span>
-
-                </div>
-
-              </div>
-            </td>
-
-            <td>${escapeHTML(row.zone)}</td>
-
-            <td>${escapeHTML(row.city)}</td>
-
-            <td>${formatNumber(row.appointments)}</td>
-
-            <td>${formatNumber(row.visits)}</td>
-
-            <td>${formatNumber(row.bookings)}</td>
-
-            <td>
-              <strong>
-                ${formatCurrency(row.ape)}
-              </strong>
-            </td>
-
-            <td>
-              ${calculateScore(row).toFixed(1)}
-            </td>
-
-          </tr>
-
-        `
-      )
-      .join("");
-
-
-  updatePodium(sorted);
-
-}
-
-
-function updatePodium(sorted) {
-
-  const positions = [
-    {
-      prefix: "first",
-      row: sorted[0]
-    },
-    {
-      prefix: "second",
-      row: sorted[1]
-    },
-    {
-      prefix: "third",
-      row: sorted[2]
+    if (!input) {
+        return;
     }
-  ];
 
 
-  positions.forEach(
-    ({ prefix, row }) => {
-
-      setText(
-        `${prefix}Initial`,
-        row
-          ? getInitials(row.name)
-          : "--"
-      );
-
-      setText(
-        `${prefix}Name`,
-        row
-          ? row.name
-          : "--"
-      );
-
-      setText(
-        `${prefix}APE`,
-        row
-          ? formatCurrency(row.ape)
-          : "--"
-      );
-
-    }
-  );
-
-}
+    const filter =
+        input.value.toLowerCase();
 
 
-/* =========================================================
-   PERFORMANCE TABLE
-========================================================= */
-
-function renderPerformanceTable() {
-
-  const body =
-    getElement(
-      "performanceTableBody"
-    );
-
-  if (!body) {
-    return;
-  }
+    const table =
+        document.getElementById("rmTable");
 
 
-  const search =
-    (
-      getElement("performanceSearch")
-        ?.value ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
+    const rows =
+        table
+            .querySelector("tbody")
+            .querySelectorAll("tr");
 
 
-  const sort =
-    getElement("performanceSort")
-      ?.value ||
-    "ape-desc";
+    rows.forEach(row => {
 
-
-  let data =
-    filteredData.filter(
-      (row) => {
 
         const text =
-          [
-            row.name,
-            row.ecode,
-            row.city,
-            row.tl,
-            row.zone
-          ]
-            .join(" ")
-            .toLowerCase();
+            row.textContent.toLowerCase();
 
 
-        return (
-          !search ||
-          text.includes(search)
-        );
-
-      }
-    );
+        row.style.display =
+            text.includes(filter)
+                ? ""
+                : "none";
 
 
-  data =
-    sortPerformanceData(
-      data,
-      sort
-    );
-
-
-  const totalPages =
-    Math.max(
-      1,
-      Math.ceil(
-        data.length /
-        rowsPerPage
-      )
-    );
-
-
-  if (
-    currentPage >
-    totalPages
-  ) {
-    currentPage = totalPages;
-  }
-
-
-  const start =
-    (currentPage - 1) *
-    rowsPerPage;
-
-
-  const pageData =
-    data.slice(
-      start,
-      start + rowsPerPage
-    );
-
-
-  body.innerHTML =
-    pageData
-      .map(
-        (row) => {
-
-          const visitRate =
-            percentage(
-              row.visits,
-              row.appointments
-            );
-
-
-          const conversion =
-            percentage(
-              row.bookings,
-              row.visits
-            );
-
-
-          return `
-
-            <tr
-              class="clickable-rm"
-              data-ecode="${escapeHTML(row.ecode)}"
-            >
-
-              <td>
-                <div class="rm-cell">
-
-                  <div class="rm-table-avatar">
-                    ${getInitials(row.name)}
-                  </div>
-
-                  <div>
-                    <span class="rm-name">
-                      ${escapeHTML(row.name)}
-                    </span>
-
-                    <span class="rm-subtext">
-                      ${escapeHTML(row.team)}
-                    </span>
-                  </div>
-
-                </div>
-              </td>
-
-              <td>
-                ${escapeHTML(row.ecode || "-")}
-              </td>
-
-              <td>
-                ${escapeHTML(row.tl)}
-              </td>
-
-              <td>
-                ${escapeHTML(row.zone)}
-              </td>
-
-              <td>
-                ${escapeHTML(row.city)}
-              </td>
-
-              <td>
-                ${formatNumber(row.appointments)}
-              </td>
-
-              <td>
-                ${formatNumber(row.visits)}
-              </td>
-
-              <td>
-                ${formatNumber(row.bookings)}
-              </td>
-
-              <td>
-                ${formatPercent(visitRate)}
-              </td>
-
-              <td class="metric-positive">
-                ${formatPercent(conversion)}
-              </td>
-
-              <td>
-                <strong>
-                  ${formatCurrency(row.ape)}
-                </strong>
-              </td>
-
-            </tr>
-
-          `;
-
-        }
-      )
-      .join("");
-
-
-  document
-    .querySelectorAll(".clickable-rm")
-    .forEach(
-      (element) => {
-
-        element.addEventListener(
-          "click",
-          () => {
-
-            const ecode =
-              element.dataset.ecode;
-
-
-            const rm =
-              filteredData.find(
-                (row) =>
-                  row.ecode === ecode
-              );
-
-
-            if (rm) {
-              openRMModal(rm);
-            }
-
-          }
-        );
-
-      }
-    );
-
-
-  setText(
-    "performanceCount",
-    `${data.length} records`
-  );
-
-
-  renderPagination(
-    totalPages
-  );
+    });
 
 }
 
 
-function sortPerformanceData(
-  data,
-  sort
-) {
+// ==========================================
+// PAGE NAVIGATION
+// ==========================================
 
-  const copy =
-    [...data];
+function showPage(pageName) {
 
 
-  if (
-    sort === "booking-desc"
-  ) {
+    // Hide all pages
 
-    return copy.sort(
-      (a, b) =>
-        b.bookings -
-        a.bookings
-    );
-
-  }
+    const pages =
+        document.querySelectorAll(".page");
 
 
-  if (
-    sort === "conversion-desc"
-  ) {
+    pages.forEach(page => {
 
-    return copy.sort(
-      (a, b) =>
-        percentage(
-          b.bookings,
-          b.visits
-        ) -
-        percentage(
-          a.bookings,
-          a.visits
-        )
-    );
+        page.classList.remove(
+            "active-page"
+        );
 
-  }
+    });
 
 
-  if (
-    sort === "appointments-desc"
-  ) {
+    // Show selected page
 
-    return copy.sort(
-      (a, b) =>
-        b.appointments -
-        a.appointments
-    );
-
-  }
+    const selectedPage =
+        document.getElementById(pageName);
 
 
-  return copy.sort(
-    (a, b) =>
-      b.ape -
-      a.ape
-  );
+    if (selectedPage) {
 
-}
+        selectedPage.classList.add(
+            "active-page"
+        );
 
-
-function renderPagination(totalPages) {
-
-  const container =
-    getElement(
-      "performancePagination"
-    );
-
-  if (!container) {
-    return;
-  }
+    }
 
 
-  container.innerHTML = "";
+    // Update navigation
+
+    const navItems =
+        document.querySelectorAll(
+            ".nav-item"
+        );
 
 
-  const maxPages =
-    Math.min(
-      totalPages,
-      5
-    );
+    navItems.forEach(item => {
+
+        item.classList.remove(
+            "active"
+        );
+
+    });
 
 
-  for (
-    let page = 1;
-    page <= maxPages;
-    page++
-  ) {
+    // Update title
 
-    const button =
-      document.createElement(
-        "button"
-      );
+    const titles = {
+
+        dashboard:
+            "Performance Dashboard",
+
+        rm:
+            "RM Performance Tracker",
+
+        master:
+            "Master Sheet",
+
+        contest:
+            "Star Contest",
+
+        zone:
+            "Zone-wise Performance",
+
+        visit:
+            "Visit Tracker",
+
+        appointment:
+            "Appointment Tracker",
+
+        booking:
+            "Booking Tracker"
+
+    };
 
 
-    button.textContent =
-      page;
+    const pageTitle =
+        document.getElementById(
+            "pageTitle"
+        );
 
 
     if (
-      page === currentPage
+        pageTitle &&
+        titles[pageName]
     ) {
-      button.classList.add(
-        "active"
-      );
+
+        pageTitle.textContent =
+            titles[pageName];
+
     }
 
 
-    button.addEventListener(
-      "click",
-      () => {
-
-        currentPage =
-          page;
-
-        renderPerformanceTable();
-
-      }
-    );
-
-
-    container.appendChild(
-      button
-    );
-
-  }
-
 }
 
 
-/* =========================================================
-   FUNNEL PAGE
-========================================================= */
-
-function renderFunnelPage(metrics) {
-
-  setText(
-    "bigFunnelAppointments",
-    formatNumber(
-      metrics.totalAppointments
-    )
-  );
-
-  setText(
-    "bigFunnelVisits",
-    formatNumber(
-      metrics.totalVisits
-    )
-  );
-
-  setText(
-    "bigFunnelBookings",
-    formatNumber(
-      metrics.totalBookings
-    )
-  );
-
-
-  setWidth(
-    "bigAppointmentFill",
-    100
-  );
-
-  setWidth(
-    "bigVisitFill",
-    percentage(
-      metrics.totalVisits,
-      metrics.totalAppointments
-    )
-  );
-
-  setWidth(
-    "bigBookingFill",
-    percentage(
-      metrics.totalBookings,
-      metrics.totalAppointments
-    )
-  );
-
-
-  renderZoneFunnelTable(
-    filteredData
-  );
-
-}
-
-
-function renderZoneFunnelTable(data) {
-
-  const body =
-    getElement("zoneFunnelBody");
-
-  if (!body) {
-    return;
-  }
-
-
-  const grouped =
-    groupBy(data, "zone");
-
-
-  body.innerHTML =
-    Object.entries(grouped)
-      .map(
-        ([zone, rows]) => {
-
-          const appointments =
-            sum(
-              rows,
-              "appointments"
-            );
-
-          const visits =
-            sum(
-              rows,
-              "visits"
-            );
-
-          const bookings =
-            sum(
-              rows,
-              "bookings"
-            );
-
-          const ape =
-            sum(
-              rows,
-              "ape"
-            );
-
-
-          return `
-
-            <tr>
-
-              <td>
-                <strong>
-                  ${escapeHTML(zone)}
-                </strong>
-              </td>
-
-              <td>
-                ${formatNumber(appointments)}
-              </td>
-
-              <td>
-                ${formatNumber(visits)}
-              </td>
-
-              <td>
-                ${formatNumber(bookings)}
-              </td>
-
-              <td>
-                ${formatPercent(
-                  percentage(
-                    visits,
-                    appointments
-                  )
-                )}
-              </td>
-
-              <td>
-                ${formatPercent(
-                  percentage(
-                    bookings,
-                    visits
-                  )
-                )}
-              </td>
-
-              <td>
-                <strong>
-                  ${formatCurrency(ape)}
-                </strong>
-              </td>
-
-            </tr>
-
-          `;
-
-        }
-      )
-      .join("");
-
-}
-
-
-/* =========================================================
-   DAILY DATA
-========================================================= */
-
-function generateDailyData(data) {
-
-  const labels = [
-    "Mon",
-    "Tue",
-    "Wed",
-    "Thu",
-    "Fri",
-    "Sat",
-    "Sun"
-  ];
-
-
-  const weights = [
-    0.11,
-    0.15,
-    0.17,
-    0.18,
-    0.16,
-    0.13,
-    0.10
-  ];
-
-
-  const totalAppointments =
-    sum(
-      data,
-      "appointments"
-    );
-
-
-  const totalVisits =
-    sum(
-      data,
-      "visits"
-    );
-
-
-  const totalBookings =
-    sum(
-      data,
-      "bookings"
-    );
-
-
-  return {
-
-    labels,
-
-    appointments:
-      weights.map(
-        (weight) =>
-          Math.round(
-            totalAppointments *
-            weight
-          )
-      ),
-
-    visits:
-      weights.map(
-        (weight) =>
-          Math.round(
-            totalVisits *
-            weight
-          )
-      ),
-
-    bookings:
-      weights.map(
-        (weight) =>
-          Math.round(
-            totalBookings *
-            weight
-          )
-      )
-
-  };
-
-}
-
-
-function renderDailyPage(data) {
-
-  const trend =
-    generateDailyData(data);
-
-
-  const canvas =
-    getElement(
-      "dailyFullChart"
-    );
-
-
-  if (
-    canvas &&
-    typeof Chart !==
-    "undefined"
-  ) {
-
-    destroyChart(
-      "dailyFull"
-    );
-
-
-    charts.dailyFull =
-      new Chart(
-        canvas,
-        {
-
-          type: "bar",
-
-          data: {
-
-            labels:
-              trend.labels,
-
-            datasets: [
-
-              {
-                label:
-                  "Appointments",
-                data:
-                  trend.appointments,
-                backgroundColor:
-                  "#2563eb"
-              },
-
-              {
-                label:
-                  "Visits",
-                data:
-                  trend.visits,
-                backgroundColor:
-                  "#8b5cf6"
-              },
-
-              {
-                label:
-                  "Bookings",
-                data:
-                  trend.bookings,
-                backgroundColor:
-                  "#10b981"
-              }
-
-            ]
-
-          },
-
-          options: {
-            responsive: true,
-            maintainAspectRatio: false
-          }
-
-        }
-      );
-
-  }
-
-
-  const body =
-    getElement(
-      "dailyTableBody"
-    );
-
-
-  if (!body) {
-    return;
-  }
-
-
-  body.innerHTML =
-    trend.labels
-      .map(
-        (day, index) => `
-
-          <tr>
-
-            <td>
-              <strong>${day}</strong>
-            </td>
-
-            <td>
-              ${formatNumber(
-                trend.appointments[index]
-              )}
-            </td>
-
-            <td>
-              ${formatNumber(
-                trend.visits[index]
-              )}
-            </td>
-
-            <td>
-              ${formatNumber(
-                trend.bookings[index]
-              )}
-            </td>
-
-            <td>
-              ${formatPercent(
-                percentage(
-                  trend.visits[index],
-                  trend.appointments[index]
-                )
-              )}
-            </td>
-
-            <td>
-              ${formatPercent(
-                percentage(
-                  trend.bookings[index],
-                  trend.visits[index]
-                )
-              )}
-            </td>
-
-          </tr>
-
-        `
-      )
-      .join("");
-
-}
-
-
-/* =========================================================
-   TEAM INSIGHTS
-========================================================= */
-
-function renderTeamInsights(data) {
-
-  renderCityChart(data);
-
-  renderZoneProductivityChart(data);
-
-
-  const body =
-    getElement(
-      "teamInsightsBody"
-    );
-
-  if (!body) {
-    return;
-  }
-
-
-  const grouped =
-    groupBy(data, "zone");
-
-
-  body.innerHTML =
-    Object.entries(grouped)
-      .map(
-        ([zone, rows]) => `
-
-          <tr>
-
-            <td>
-              <strong>
-                ${escapeHTML(zone)}
-              </strong>
-            </td>
-
-            <td>
-              ${formatNumber(rows.length)}
-            </td>
-
-            <td>
-              ${formatNumber(
-                sum(
-                  rows,
-                  "appointments"
-                )
-              )}
-            </td>
-
-            <td>
-              ${formatNumber(
-                sum(
-                  rows,
-                  "visits"
-                )
-              )}
-            </td>
-
-            <td>
-              ${formatNumber(
-                sum(
-                  rows,
-                  "bookings"
-                )
-              )}
-            </td>
-
-            <td>
-              ${formatCurrency(
-                sum(
-                  rows,
-                  "ape"
-                )
-              )}
-            </td>
-
-          </tr>
-
-        `
-      )
-      .join("");
-
-}
-
-
-function renderCityChart(data) {
-
-  const canvas =
-    getElement("cityChart");
-
-  if (
-    !canvas ||
-    typeof Chart ===
-    "undefined"
-  ) {
-    return;
-  }
-
-
-  const grouped =
-    groupBy(data, "city");
-
-
-  const cities =
-    Object.keys(grouped);
-
-
-  const values =
-    cities.map(
-      (city) =>
-        sum(
-          grouped[city],
-          "ape"
-        )
-    );
-
-
-  destroyChart("city");
-
-
-  charts.city =
-    new Chart(
-      canvas,
-      {
-
-        type: "bar",
-
-        data: {
-
-          labels: cities,
-
-          datasets: [
-            {
-              label: "APE",
-              data: values,
-              backgroundColor:
-                "#8b5cf6",
-              borderRadius: 7
-            }
-          ]
-
-        },
-
-        options: {
-
-          indexAxis: "y",
-
-          responsive: true,
-
-          maintainAspectRatio: false
-
-        }
-
-      }
-    );
-
-}
-
-
-function renderZoneProductivityChart(data) {
-
-  const canvas =
-    getElement(
-      "zoneProductivityChart"
-    );
-
-  if (
-    !canvas ||
-    typeof Chart ===
-    "undefined"
-  ) {
-    return;
-  }
-
-
-  const grouped =
-    groupBy(data, "zone");
-
-
-  const zones =
-    Object.keys(grouped);
-
-
-  const productivity =
-    zones.map(
-      (zone) => {
-
-        const rows =
-          grouped[zone];
-
-        return (
-          sum(
-            rows,
-            "bookings"
-          ) /
-          Math.max(
-            1,
-            rows.length
-          )
-        );
-
-      }
-    );
-
-
-  destroyChart(
-    "zoneProductivity"
-  );
-
-
-  charts.zoneProductivity =
-    new Chart(
-      canvas,
-      {
-
-        type: "radar",
-
-        data: {
-
-          labels: zones,
-
-          datasets: [
-            {
-              label:
-                "Bookings per RM",
-
-              data:
-                productivity,
-
-              borderColor:
-                "#2563eb",
-
-              backgroundColor:
-                "rgba(37,99,235,0.15)"
-            }
-          ]
-
-        },
-
-        options: {
-          responsive: true,
-          maintainAspectRatio: false
-        }
-
-      }
-    );
-
-}
-
-
-/* =========================================================
-   TOP PERFORMER
-========================================================= */
-
-function updateTopPerformer(data) {
-
-  const top =
-    getSortedByAPE(data)[0];
-
-
-  if (!top) {
-    return;
-  }
-
-
-  setText(
-    "topPerformerInitial",
-    getInitials(top.name)
-  );
-
-  setText(
-    "topPerformerName",
-    top.name
-  );
-
-  setText(
-    "topPerformerMeta",
-    `${top.city} • ${top.zone}`
-  );
-
-  setText(
-    "topPerformerAPE",
-    formatCurrency(top.ape)
-  );
-
-  setText(
-    "topPerformerBookings",
-    formatNumber(top.bookings)
-  );
-
-}
-
-
-/* =========================================================
-   DATA EXPLORER
-========================================================= */
-
-function updateDataExplorer() {
-
-  const body =
-    getElement(
-      "dataExplorerBody"
-    );
-
-  if (!body) {
-    return;
-  }
-
-
-  body.innerHTML =
-    filteredData
-      .slice(0, 100)
-      .map(
-        (row) => `
-
-          <tr>
-
-            <td>
-              ${escapeHTML(row.name)}
-            </td>
-
-            <td>
-              ${escapeHTML(row.ecode || "-")}
-            </td>
-
-            <td>
-              ${escapeHTML(row.tl)}
-            </td>
-
-            <td>
-              ${escapeHTML(row.zone)}
-            </td>
-
-            <td>
-              ${escapeHTML(row.city)}
-            </td>
-
-            <td>
-              ${escapeHTML(row.team)}
-            </td>
-
-            <td>
-              ${formatNumber(row.appointments)}
-            </td>
-
-            <td>
-              ${formatNumber(row.visits)}
-            </td>
-
-            <td>
-              ${formatNumber(row.bookings)}
-            </td>
-
-            <td>
-              ${formatCurrency(row.ape)}
-            </td>
-
-          </tr>
-
-        `
-      )
-      .join("");
-
-}
-
-
-/* =========================================================
-   RM MODAL
-========================================================= */
-
-function openRMModal(row) {
-
-  const sorted =
-    getSortedByAPE(
-      filteredData
-    );
-
-
-  const rank =
-    sorted.findIndex(
-      (item) =>
-        item.ecode ===
-        row.ecode
-    ) + 1;
-
-
-  setText(
-    "modalInitial",
-    getInitials(row.name)
-  );
-
-  setText(
-    "modalName",
-    row.name
-  );
-
-  setText(
-    "modalMeta",
-    `${row.ecode || "No ECODE"} • ${row.city} • ${row.zone}`
-  );
-
-  setText(
-    "modalAppointments",
-    formatNumber(row.appointments)
-  );
-
-  setText(
-    "modalVisits",
-    formatNumber(row.visits)
-  );
-
-  setText(
-    "modalBookings",
-    formatNumber(row.bookings)
-  );
-
-  setText(
-    "modalAPE",
-    formatCurrency(row.ape)
-  );
-
-  setText(
-    "modalVisitRate",
-    formatPercent(
-      percentage(
-        row.visits,
-        row.appointments
-      )
-    )
-  );
-
-  setText(
-    "modalConversion",
-    formatPercent(
-      percentage(
-        row.bookings,
-        row.visits
-      )
-    )
-  );
-
-  setText(
-    "modalRank",
-    rank > 0
-      ? `#${rank}`
-      : "--"
-  );
-
-
-  const modal =
-    getElement("rmModal");
-
-  if (modal) {
-    modal.classList.add("show");
-  }
-
-}
-
-
-function closeRMModal() {
-
-  const modal =
-    getElement("rmModal");
-
-  if (modal) {
-    modal.classList.remove("show");
-  }
-
-}
-
-
-/* =========================================================
-   EXPORT CSV
-========================================================= */
-
-function exportDashboardCSV() {
-
-  const metrics =
-    calculateMetrics(
-      filteredData
-    );
-
-
-  const rows = [
-
-    [
-      "Metric",
-      "Value"
-    ],
-
-    [
-      "Total Appointments",
-      metrics.totalAppointments
-    ],
-
-    [
-      "Total Visits",
-      metrics.totalVisits
-    ],
-
-    [
-      "Total Bookings",
-      metrics.totalBookings
-    ],
-
-    [
-      "Total APE",
-      metrics.totalAPE
-    ],
-
-    [
-      "Active FOS",
-      metrics.activeRMs
-    ]
-
-  ];
-
-
-  downloadCSV(
-    rows,
-    "FOS-Dashboard-Summary.csv"
-  );
-
-}
-
-
-function exportDataCSV() {
-
-  const rows = [
-
-    [
-      "RM Name",
-      "ECODE",
-      "TL",
-      "Zone",
-      "City",
-      "Team",
-      "Appointments",
-      "Visits",
-      "Bookings",
-      "APE"
-    ],
-
-    ...filteredData.map(
-      (row) => [
-
-        row.name,
-        row.ecode,
-        row.tl,
-        row.zone,
-        row.city,
-        row.team,
-        row.appointments,
-        row.visits,
-        row.bookings,
-        row.ape
-
-      ]
-    )
-
-  ];
-
-
-  downloadCSV(
-    rows,
-    "FOS-Performance-Data.csv"
-  );
-
-}
-
-
-function downloadCSV(
-  rows,
-  fileName
-) {
-
-  const csv =
-    rows
-      .map(
-        (row) =>
-          row
-            .map(
-              (value) =>
-                `"${String(value).replace(
-                  /"/g,
-                  '""'
-                )}"`
-            )
-            .join(",")
-      )
-      .join("\n");
-
-
-  const blob =
-    new Blob(
-      [csv],
-      {
-        type:
-          "text/csv;charset=utf-8;"
-      }
-    );
-
-
-  const url =
-    URL.createObjectURL(blob);
-
-
-  const link =
-    document.createElement("a");
-
-
-  link.href = url;
-
-  link.download = fileName;
-
-
-  document.body.appendChild(
-    link
-  );
-
-
-  link.click();
-
-
-  document.body.removeChild(
-    link
-  );
-
-
-  URL.revokeObjectURL(
-    url
-  );
-
-
-  showToast(
-    "Export completed successfully"
-  );
-
-}
-
-
-/* =========================================================
-   GENERAL HELPERS
-========================================================= */
-
-function groupBy(data, key) {
-
-  return data.reduce(
-    (grouped, item) => {
-
-      const value =
-        item[key] ||
-        "Unassigned";
-
-
-      if (
-        !grouped[value]
-      ) {
-        grouped[value] = [];
-      }
-
-
-      grouped[value].push(
-        item
-      );
-
-
-      return grouped;
-
-    },
-    {}
-  );
-
-}
-
-
-function calculateScore(row) {
-
-  const conversion =
-    percentage(
-      row.bookings,
-      row.visits
-    );
-
-
-  return (
-    row.bookings * 2 +
-    conversion +
-    row.ape / 100000
-  );
-
-}
-
-
-function setText(id, value) {
-
-  const element =
-    getElement(id);
-
-  if (element) {
-    element.textContent = value;
-  }
-
-}
-
-
-function setWidth(id, value) {
-
-  const element =
-    getElement(id);
-
-  if (element) {
-
-    const safeValue =
-      Math.min(
-        100,
-        Math.max(
-          0,
-          value
-        )
-      );
-
-
-    element.style.width =
-      `${safeValue}%`;
-
-  }
-
-}
-
-
-function formatNumber(value) {
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      maximumFractionDigits: 0
-    }
-  ).format(
-    Number(value) || 0
-  );
-
-}
-
+// ==========================================
+// FORMAT CURRENCY
+// ==========================================
 
 function formatCurrency(value) {
 
-  const number =
-    Number(value) || 0;
 
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
 
-  if (
-    Math.abs(number) >=
-    10000000
-  ) {
+        return "-";
 
-    return `₹${(
-      number / 10000000
-    ).toFixed(2)} Cr`;
-
-  }
-
-
-  if (
-    Math.abs(number) >=
-    100000
-  ) {
-
-    return `₹${(
-      number / 100000
-    ).toFixed(2)} L`;
-
-  }
-
-
-  if (
-    Math.abs(number) >=
-    1000
-  ) {
-
-    return `₹${(
-      number / 1000
-    ).toFixed(1)}K`;
-
-  }
-
-
-  return new Intl.NumberFormat(
-    "en-IN",
-    {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0
     }
-  ).format(number);
-
-}
 
 
-function formatPercent(value) {
-
-  return `${(
-    Number(value) || 0
-  ).toFixed(1)}%`;
-
-}
+    const number =
+        getNumber(value);
 
 
-function getInitials(name) {
+    if (number >= 100000) {
 
-  if (!name) {
-    return "--";
-  }
+        return "₹" +
+            (number / 100000)
+                .toFixed(2) +
+            "L";
 
-
-  return String(name)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(
-      (part) =>
-        part.charAt(0)
-          .toUpperCase()
-    )
-    .join("");
-
-}
+    }
 
 
-function escapeHTML(value) {
-
-  return String(
-    value ?? ""
-  )
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
-
-}
-
-
-function showLoading(show) {
-
-  const overlay =
-    getElement(
-      "loadingOverlay"
-    );
-
-  if (overlay) {
-    overlay.classList.toggle(
-      "show",
-      show
-    );
-  }
-
-}
-
-
-let toastTimer;
-
-
-function showToast(message) {
-
-  const toast =
-    getElement("toast");
-
-  const toastMessage =
-    getElement("toastMessage");
-
-
-  if (
-    !toast ||
-    !toastMessage
-  ) {
-    return;
-  }
-
-
-  toastMessage.textContent =
-    message;
-
-
-  toast.classList.add("show");
-
-
-  clearTimeout(toastTimer);
-
-
-  toastTimer =
-    setTimeout(
-      () => {
-
-        toast.classList.remove(
-          "show"
+    return "₹" +
+        number.toLocaleString(
+            "en-IN"
         );
 
-      },
-      3000
-    );
+
+}
+
+
+// ==========================================
+// TODAY'S DATE
+// ==========================================
+
+function setTodayDate() {
+
+
+    const todayDate =
+        document.getElementById(
+            "todayDate"
+        );
+
+
+    if (!todayDate) {
+        return;
+    }
+
+
+    const today =
+        new Date();
+
+
+    todayDate.textContent =
+        today.toLocaleDateString(
+            "en-IN",
+            {
+
+                day: "numeric",
+
+                month: "short",
+
+                year: "numeric"
+
+            }
+        );
+
 
 }

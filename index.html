@@ -1,460 +1,576 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
   <title>FOS Performance Portal</title>
 
-  <link rel="stylesheet" href="style.css" />
+  <link
+    rel="stylesheet"
+    href="style.css"
+  >
+
+  <!-- SheetJS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
+  ></script>
+
+  <!-- Chart.js -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js"
+  ></script>
+
 </head>
 
 <body>
 
   <!-- =========================
-       SIDEBAR
+       LOADING SCREEN
   ========================== -->
 
-  <aside class="sidebar">
+  <div id="loadingScreen" class="loading-screen">
 
-    <div class="logo-area">
-      <div class="logo-icon">↗</div>
+    <div class="loader"></div>
 
-      <div>
-        <h2>FOS Portal</h2>
-        <p>Performance Intelligence</p>
-      </div>
-    </div>
+    <h2>FOS Performance Portal</h2>
 
+    <p>Loading live data...</p>
 
-    <div class="menu-title">MAIN MENU</div>
-
-    <button class="nav-btn active" data-page="dashboard">
-      📊 <span>Dashboard</span>
-    </button>
-
-    <button class="nav-btn" data-page="employee">
-      👤 <span>Employee Performance</span>
-    </button>
-
-    <button class="nav-btn" data-page="zone">
-      📈 <span>Zone Comparison</span>
-    </button>
-
-    <button class="nav-btn" data-page="data">
-      📋 <span>All Data</span>
-    </button>
-
-
-    <div class="sidebar-bottom">
-
-      <button id="refreshSidebar" class="refresh-side-btn">
-        ↻ Refresh Data
-      </button>
-
-      <div id="dataStatus" class="data-status">
-        Ready
-      </div>
-
-    </div>
-
-  </aside>
-
+  </div>
 
 
   <!-- =========================
-       MAIN AREA
+       APP
   ========================== -->
 
-  <main class="main-content">
+  <div id="app" class="app hidden">
 
 
-    <!-- TOP BAR -->
+    <!-- =========================
+         SIDEBAR
+    ========================== -->
 
-    <header class="topbar">
+    <aside class="sidebar">
 
-      <div>
-        <h1 id="pageTitle">Performance Dashboard</h1>
-        <p id="pageSubtitle">Live data from Google Sheets</p>
+      <div class="brand">
+
+        <div class="brand-icon">
+          F
+        </div>
+
+        <div>
+
+          <h2>FOS Portal</h2>
+
+          <span>Performance Dashboard</span>
+
+        </div>
+
       </div>
 
 
-      <div class="top-actions">
+      <nav class="nav-menu">
 
-        <div class="search-box">
-          🔍
-          <input
-            type="text"
-            id="globalSearch"
-            placeholder="Search E-Code, Username or Name..."
-          />
-        </div>
+        <button
+          class="nav-item active"
+          data-section="dashboard"
+        >
+          <span>📊</span>
+          Dashboard
+        </button>
 
+
+        <button
+          class="nav-item"
+          data-section="employees"
+        >
+          <span>👥</span>
+          FOS Directory
+        </button>
+
+
+        <button
+          class="nav-item"
+          data-section="analytics"
+        >
+          <span>📈</span>
+          Analytics
+        </button>
+
+
+        <button
+          class="nav-item"
+          data-section="data"
+        >
+          <span>🗂️</span>
+          All Parameters
+        </button>
+
+      </nav>
+
+
+      <div class="sidebar-bottom">
 
         <button id="refreshBtn" class="refresh-btn">
-          ↻ Refresh
+
+          ↻ Refresh Live Data
+
         </button>
+
+
+        <p id="lastUpdated">
+
+          Loading...
+
+        </p>
 
       </div>
 
-    </header>
-
+    </aside>
 
 
     <!-- =========================
-         DASHBOARD PAGE
+         MAIN CONTENT
     ========================== -->
 
-    <section id="dashboardPage" class="page active-page">
+    <main class="main-content">
 
-      <div class="hero">
+
+      <!-- HEADER -->
+
+      <header class="top-header">
 
         <div>
-          <h2>FOS Performance Dashboard 👋</h2>
+
+          <h1 id="pageTitle">
+
+            FOS Performance Dashboard
+
+          </h1>
 
           <p>
-            Track performance, compare zones and analyse employee productivity.
+
+            Live performance data from RM Tracker FOS
+
           </p>
-        </div>
-
-        <div class="hero-icon">
-          📊
-        </div>
-
-      </div>
-
-
-
-      <!-- FILTERS -->
-
-      <div class="filters">
-
-        <div class="filter-item">
-
-          <label>Zone</label>
-
-          <select id="zoneFilter">
-            <option value="">All Zones</option>
-          </select>
 
         </div>
 
 
-        <div class="filter-item">
+        <div class="header-actions">
 
-          <label>City</label>
+          <div
+            id="dataStatus"
+            class="status-badge"
+          >
 
-          <select id="cityFilter">
-            <option value="">All Cities</option>
-          </select>
+            ● Live Data
+
+          </div>
+
+        </div>
+
+      </header>
+
+
+      <!-- =========================
+           GLOBAL FILTERS
+      ========================== -->
+
+      <section class="filter-panel">
+
+        <div class="filter-panel-header">
+
+          <h3>Filters</h3>
+
+          <button
+            id="clearFilters"
+            class="clear-btn"
+          >
+
+            Clear Filters
+
+          </button>
 
         </div>
 
 
-        <div class="filter-item">
+        <div
+          id="dynamicFilters"
+          class="filters-grid"
+        >
 
-          <label>TL</label>
+          <!-- Dynamic Filters -->
 
-          <select id="tlFilter">
-            <option value="">All TLs</option>
-          </select>
+        </div>
+
+      </section>
+
+
+      <!-- =========================
+           DASHBOARD
+      ========================== -->
+
+      <section
+        id="dashboard"
+        class="content-section active-section"
+      >
+
+
+        <!-- KPI CARDS -->
+
+        <div
+          id="kpiCards"
+          class="kpi-grid"
+        >
+
+          <!-- Dynamic KPI Cards -->
 
         </div>
 
 
-        <div class="filter-item">
+        <!-- CHARTS -->
 
-          <label>ZM</label>
+        <div class="charts-grid">
 
-          <select id="zmFilter">
-            <option value="">All ZMs</option>
-          </select>
+          <div class="chart-card">
 
-        </div>
+            <div class="card-header">
 
+              <h3>Performance Overview</h3>
 
-        <div class="filter-item">
-
-          <label>Trainer</label>
-
-          <select id="trainerFilter">
-            <option value="">All Trainers</option>
-          </select>
-
-        </div>
-
-
-        <button id="clearFilters" class="clear-btn">
-          Clear Filters
-        </button>
-
-      </div>
-
-
-
-      <!-- KPI CARDS -->
-
-      <div class="cards-grid">
-
-        <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <p>Active Employees</p>
-          <h2 id="activeEmployees">0</h2>
-          <span>Unique E-Codes</span>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-icon">🗓️</div>
-          <p>Total Appointments</p>
-          <h2 id="totalAppointments">0</h2>
-          <span>Live calculation</span>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-icon">🚶</div>
-          <p>Total Visits</p>
-          <h2 id="totalVisits">0</h2>
-          <span id="visitPercent">0% visit rate</span>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-icon">✓</div>
-          <p>Total Bookings</p>
-          <h2 id="totalBookings">0</h2>
-          <span id="appointmentConversion">0%</span>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-icon">₹</div>
-          <p>Total APE</p>
-          <h2 id="totalAPE">₹0</h2>
-          <span>Business generated</span>
-        </div>
-
-
-        <div class="stat-card">
-          <div class="stat-icon">📈</div>
-          <p>Visit → Booking</p>
-          <h2 id="visitConversion">0%</h2>
-          <span>Overall conversion</span>
-        </div>
-
-      </div>
-
-
-
-      <!-- DASHBOARD TABLES -->
-
-      <div class="dashboard-grid">
-
-        <div class="panel">
-
-          <div class="panel-header">
-            <div>
-              <h3>Top Employees</h3>
-              <p>Based on APE</p>
             </div>
+
+            <canvas
+              id="performanceChart"
+            ></canvas>
+
           </div>
 
-          <div id="topEmployees">
-            <p class="empty-message">Loading data...</p>
-          </div>
 
-        </div>
+          <div class="chart-card">
 
+            <div class="card-header">
 
-        <div class="panel">
+              <h3>Top Performers</h3>
 
-          <div class="panel-header">
-            <div>
-              <h3>Zone Performance</h3>
-              <p>Zone-wise comparison</p>
             </div>
+
+            <canvas
+              id="topPerformersChart"
+            ></canvas>
+
           </div>
 
-          <div id="zoneSummary">
-            <p class="empty-message">Loading data...</p>
+        </div>
+
+
+        <!-- DAILY PERFORMANCE -->
+
+        <div class="section-card">
+
+          <div class="card-header">
+
+            <div>
+
+              <h3>Daily Performance</h3>
+
+              <p>
+                Appointments, Visits, Bookings and APE
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div class="daily-controls">
+
+            <select id="dailyMetric">
+
+              <option value="Appointment">
+                Appointments
+              </option>
+
+              <option value="Visit">
+                Visits
+              </option>
+
+              <option value="Booking">
+                Bookings
+              </option>
+
+              <option value="APE">
+                APE
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <div class="daily-chart-container">
+
+            <canvas
+              id="dailyChart"
+            ></canvas>
+
           </div>
 
         </div>
 
-      </div>
 
-    </section>
+        <!-- TOP TABLE -->
 
+        <div class="section-card">
 
+          <div class="card-header">
 
-    <!-- =========================
-         EMPLOYEE PAGE
-    ========================== -->
+            <h3>Top FOS Performance</h3>
 
-    <section id="employeePage" class="page">
-
-      <div class="section-heading">
-
-        <div>
-          <h2>Employee Performance</h2>
-          <p>Search and analyse individual employee performance.</p>
-        </div>
-
-      </div>
+          </div>
 
 
-      <div class="employee-search-area">
+          <div class="table-wrapper">
 
-        <input
-          type="text"
-          id="employeeSearch"
-          placeholder="Enter E-Code, Username or Employee Name"
-        />
+            <table id="topTable">
 
-        <button id="employeeSearchBtn">
-          Search
-        </button>
+              <thead>
 
-      </div>
+                <tr>
 
+                  <th>ECODE</th>
+                  <th>User Name</th>
+                  <th>Trainer</th>
+                  <th>Visits</th>
+                  <th>Bookings</th>
+                  <th>APE</th>
+                  <th>Projection</th>
 
-      <div id="employeeProfile" class="employee-profile">
+                </tr>
 
-        <div class="empty-state">
-          Search for an employee to view complete performance.
-        </div>
-
-      </div>
+              </thead>
 
 
-      <div class="panel">
+              <tbody>
 
-        <h3>Employee-wise Data</h3>
+              </tbody>
 
-        <div class="table-wrapper">
+            </table>
 
-          <table>
-
-            <thead>
-
-              <tr>
-                <th>Date</th>
-                <th>Appointment</th>
-                <th>Visit</th>
-                <th>Booking</th>
-                <th>APE</th>
-                <th>Appt Conv.</th>
-                <th>Visit Conv.</th>
-              </tr>
-
-            </thead>
-
-            <tbody id="employeeTableBody">
-            </tbody>
-
-          </table>
+          </div>
 
         </div>
 
-      </div>
 
-    </section>
-
+      </section>
 
 
-    <!-- =========================
-         ZONE PAGE
-    ========================== -->
+      <!-- =========================
+           FOS DIRECTORY
+      ========================== -->
 
-    <section id="zonePage" class="page">
+      <section
+        id="employees"
+        class="content-section"
+      >
 
-      <div class="section-heading">
+        <div class="section-card">
 
-        <div>
-          <h2>Zone Comparison</h2>
-          <p>Compare performance across zones.</p>
-        </div>
+          <div class="card-header directory-header">
 
-      </div>
+            <div>
 
+              <h3>FOS Directory</h3>
 
-      <div class="panel">
+              <p id="employeeCount">
+                0 records
+              </p>
 
-        <div class="table-wrapper">
-
-          <table>
-
-            <thead>
-
-              <tr>
-                <th>Zone</th>
-                <th>Employees</th>
-                <th>Appointments</th>
-                <th>Visits</th>
-                <th>Bookings</th>
-                <th>APE</th>
-                <th>Appt → Booking</th>
-                <th>Visit → Booking</th>
-              </tr>
-
-            </thead>
-
-            <tbody id="zoneTableBody">
-            </tbody>
-
-          </table>
-
-        </div>
-
-      </div>
-
-    </section>
+            </div>
 
 
+            <input
+              type="text"
+              id="employeeSearch"
+              placeholder="Search anything..."
+            >
 
-    <!-- =========================
-         ALL DATA PAGE
-    ========================== -->
-
-    <section id="dataPage" class="page">
-
-      <div class="section-heading">
-
-        <div>
-          <h2>All Data</h2>
-          <p>Complete data received from Google Sheets.</p>
-        </div>
-
-        <div class="data-count">
-          Records: <strong id="recordCount">0</strong>
-        </div>
-
-      </div>
+          </div>
 
 
-      <div class="panel">
+          <div class="table-wrapper">
 
-        <div class="table-wrapper">
+            <table
+              id="employeeTable"
+            >
 
-          <table id="allDataTable">
+              <thead>
 
-            <thead id="allDataHead">
-            </thead>
+              </thead>
 
-            <tbody id="allDataBody">
-            </tbody>
+              <tbody>
 
-          </table>
+              </tbody>
+
+            </table>
+
+          </div>
 
         </div>
 
-      </div>
-
-    </section>
+      </section>
 
 
-  </main>
+      <!-- =========================
+           ANALYTICS
+      ========================== -->
+
+      <section
+        id="analytics"
+        class="content-section"
+      >
+
+        <div class="analytics-controls">
+
+          <div>
+
+            <label>
+
+              Select Parameter
+
+            </label>
+
+
+            <select
+              id="analyticsParameter"
+            >
+
+            </select>
+
+          </div>
+
+        </div>
+
+
+        <div class="section-card">
+
+          <div class="card-header">
+
+            <h3 id="analyticsTitle">
+
+              Parameter Analysis
+
+            </h3>
+
+          </div>
+
+
+          <canvas
+            id="analyticsChart"
+          ></canvas>
+
+        </div>
+
+
+        <div class="section-card">
+
+          <div
+            id="analyticsSummary"
+            class="analytics-summary"
+          >
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- =========================
+           ALL PARAMETERS
+      ========================== -->
+
+      <section
+        id="data"
+        class="content-section"
+      >
+
+        <div class="section-card">
+
+          <div class="card-header">
+
+            <div>
+
+              <h3>All Parameters</h3>
+
+              <p>
+
+                Every parameter currently available
+                in RM Tracker FOS
+
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div class="parameter-search">
+
+            <input
+              type="text"
+              id="parameterSearch"
+              placeholder="Search parameter..."
+            >
+
+          </div>
+
+
+          <div
+            id="parameterList"
+            class="parameter-list"
+          >
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+    </main>
+
+  </div>
+
+
+  <!-- =========================
+       TOAST
+  ========================== -->
+
+  <div
+    class="toast"
+    id="toast"
+  >
+
+    <span id="toastIcon">
+
+      ✓
+
+    </span>
+
+    <span id="toastMessage">
+
+      Success
+
+    </span>
+
+  </div>
 
 
   <script src="app.js"></script>

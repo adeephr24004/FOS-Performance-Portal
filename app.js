@@ -1,37 +1,151 @@
-// ==========================================
-// FOS DASHBOARD - GOOGLE SHEETS VERSION
-// ==========================================
+// ==========================================================
+// FOS PERFORMANCE PORTAL
+// GOOGLE SHEETS CONNECTION
+// ==========================================================
 
-// YOUR GOOGLE APPS SCRIPT WEB APP URL
 const GOOGLE_SHEET_API =
-  "https://script.google.com/macros/s/AKfycbxj4T2tfxd_O0Tg84RnqGkS4XBjOurS1hKeJv8fFkFPGwj5D2huFJth8r51IyEeU0E/exec";
+  "https://script.google.com/macros/s/AKfycbx3DH5vcJaP3PjC2PwKsIA_ZwIFoF1gdJ-26gOKrjY6MLaakuyqI7dwSKC7xbNlQw/exec";
 
-let allData = [];
+let rawData = [];
 let filteredData = [];
-let rmData = [];
+let currentEmployee = null;
 
-// ==========================================
+
+// ==========================================================
+// COLUMN NAME DETECTION
+// This allows different column naming formats in Google Sheet
+// ==========================================================
+
+const FIELD_ALIASES = {
+
+  ecode: [
+    "ecode",
+    "e code",
+    "e-code",
+    "employee code",
+    "employee id",
+    "emp code",
+    "code"
+  ],
+
+  username: [
+    "username",
+    "user name",
+    "user",
+    "login"
+  ],
+
+  name: [
+    "name",
+    "employee name",
+    "rm name",
+    "fos name"
+  ],
+
+  doj: [
+    "doj",
+    "date of joining",
+    "joining date",
+    "date joining"
+  ],
+
+  tl: [
+    "tl",
+    "team leader",
+    "tl name"
+  ],
+
+  zm: [
+    "zm",
+    "zonal manager",
+    "zone manager",
+    "zm name"
+  ],
+
+  city: [
+    "city"
+  ],
+
+  zone: [
+    "zone",
+    "region"
+  ],
+
+  trainer: [
+    "trainer",
+    "trainer name",
+    "name of trainer"
+  ],
+
+  tenure: [
+    "tenure"
+  ],
+
+  appt: [
+    "appt",
+    "appointment",
+    "appointments",
+    "total appointment"
+  ],
+
+  visit: [
+    "visit",
+    "visits",
+    "total visit"
+  ],
+
+  booking: [
+    "booking",
+    "bookings",
+    "total booking"
+  ],
+
+  ape: [
+    "ape",
+    "total ape"
+  ],
+
+  date: [
+    "date",
+    "business date",
+    "report date"
+  ],
+
+  my: [
+    "my",
+    "month",
+    "month year"
+  ]
+
+};
+
+
+// ==========================================================
 // START APPLICATION
-// ==========================================
+// ==========================================================
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", () => {
+
+  setupNavigation();
+  setupFilters();
+  setupEmployeeSearch();
+  setupGlobalSearch();
+  setupRefreshButtons();
+  setupDataSearch();
+
   loadGoogleSheetData();
 
-  setupFilters();
-  setupRefreshButton();
-  setupNavigation();
 });
 
 
-// ==========================================
-// LOAD DATA FROM GOOGLE SHEET
-// ==========================================
+// ==========================================================
+// LOAD GOOGLE SHEET DATA
+// ==========================================================
 
 async function loadGoogleSheetData() {
 
-  console.log("Loading Google Sheet data...");
-
-  showStatus("Loading data from Google Sheets...");
+  showLoading(true);
+  hideError();
 
   try {
 
@@ -40,101 +154,126 @@ async function loadGoogleSheetData() {
     });
 
     if (!response.ok) {
-      throw new Error("Unable to connect to Google Sheet");
+      throw new Error(
+        `Server returned error: ${response.status}`
+      );
     }
 
     const data = await response.json();
 
-    console.log("Google Sheet Data:", data);
-
     if (!Array.isArray(data)) {
-      throw new Error("Data received is not in the correct format");
+      throw new Error(
+        "Google Sheet API did not return an array of records."
+      );
     }
 
-    allData = data;
+    rawData = data
+      .map(normalizeRecord)
+      .filter(record => Object.keys(record).length > 0);
 
-    filteredData = [...allData];
+    filteredData = [...rawData];
 
-    console.log("Total rows:", allData.length);
+    console.log("GOOGLE SHEET DATA:", rawData);
 
-    populateDropdowns();
+    populateAllFilters();
+    updateDashboard();
+    updateZoneComparison();
+    updateAllDataTable();
 
-    processDashboard();
-
-    showStatus(
-      "Connected to Google Sheets ✓"
-    );
+    updateLastUpdated();
 
   } catch (error) {
 
     console.error(error);
 
-    showStatus(
-      "Connection failed: " + error.message
+    showError(
+      error.message +
+      ". Please check the Google Apps Script deployment."
     );
 
-    alert(
-      "Unable to load Google Sheet data.\n\n" +
-      "Please check:\n" +
-      "1. Apps Script deployment\n" +
-      "2. Web App URL\n" +
-      "3. Access permissions"
-    );
+  } finally {
+
+    showLoading(false);
+
   }
+
 }
 
 
-// ==========================================
-// COLUMN FINDER
-// Automatically finds your columns
-// ==========================================
+// ==========================================================
+// NORMALIZE RECORD
+// ==========================================================
 
-function getValue(row, possibleNames) {
+function normalizeRecord(record) {
 
-  if (!row) return "";
+  const newRecord = {};
 
-  const keys = Object.keys(row);
+  Object.keys(record).forEach(key => {
 
-  for (let name of possibleNames) {
+    const cleanKey = String(key || "")
+      .trim()
+      .toLowerCase();
+
+    newRecord[cleanKey] = record[key];
+
+  });
+
+  return newRecord;
+
+}
+
+
+// ==========================================================
+// FIND VALUE USING ALIASES
+// ==========================================================
+
+function getField(record, fieldName) {
+
+  const aliases = FIELD_ALIASES[fieldName] || [];
+
+  const keys = Object.keys(record);
+
+  for (const alias of aliases) {
 
     const foundKey = keys.find(key =>
-      cleanName(key) === cleanName(name)
+      normalizeText(key) === normalizeText(alias)
     );
 
     if (foundKey !== undefined) {
-      return row[foundKey];
+
+      const value = record[foundKey];
+
+      if (
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+      ) {
+        return value;
+      }
+
     }
-  }
 
-  for (let name of possibleNames) {
-
-    const foundKey = keys.find(key =>
-      cleanName(key).includes(cleanName(name)) ||
-      cleanName(name).includes(cleanName(key))
-    );
-
-    if (foundKey !== undefined) {
-      return row[foundKey];
-    }
   }
 
   return "";
+
 }
 
 
-function cleanName(value) {
+function normalizeText(value) {
 
   return String(value || "")
     .toLowerCase()
     .trim()
     .replace(/[_-]/g, " ")
     .replace(/\s+/g, " ");
+
 }
 
 
-// ==========================================
-// CONVERT VALUE TO NUMBER
-// ==========================================
+// ==========================================================
+// NUMBER CONVERSION
+// ==========================================================
 
 function numberValue(value) {
 
@@ -146,1290 +285,1086 @@ function numberValue(value) {
     return 0;
   }
 
-  const cleanValue = String(value)
+  if (typeof value === "number") {
+    return isNaN(value) ? 0 : value;
+  }
+
+  const cleaned = String(value)
     .replace(/₹/g, "")
     .replace(/,/g, "")
-    .replace(/%/g, "")
-    .trim();
+    .replace(/[^0-9.-]/g, "");
 
-  const result = Number(cleanValue);
+  const number = parseFloat(cleaned);
 
-  return isNaN(result) ? 0 : result;
+  return isNaN(number) ? 0 : number;
+
 }
 
 
-// ==========================================
-// NORMALISE DATA
-// ==========================================
+// ==========================================================
+// FORMAT NUMBER
+// ==========================================================
 
-function normalizeData(data) {
+function formatNumber(value) {
 
-  return data.map(row => {
+  return numberValue(value)
+    .toLocaleString("en-IN", {
+      maximumFractionDigits: 0
+    });
 
-    return {
+}
 
-      raw: row,
 
-      date: getValue(row, [
-        "Date",
-        "Date Wise",
-        "Visit Date"
-      ]),
+function formatAPE(value) {
 
-      ecode: getValue(row, [
-        "Ecode",
-        "E-Code",
-        "E Code",
-        "Employee Code",
-        "Employee ID"
-      ]),
+  const number = numberValue(value);
 
-      username: getValue(row, [
-        "Username",
-        "User Name",
-        "User"
-      ]),
+  if (number >= 10000000) {
+    return "₹" + (number / 10000000)
+      .toFixed(2) + " Cr";
+  }
 
-      name: getValue(row, [
-        "Name",
-        "RM Name",
-        "Employee Name"
-      ]),
+  if (number >= 100000) {
+    return "₹" + (number / 100000)
+      .toFixed(2) + " L";
+  }
 
-      doj: getValue(row, [
-        "DOJ",
-        "Date of Joining",
-        "Joining Date"
-      ]),
+  if (number >= 1000) {
+    return "₹" + (number / 1000)
+      .toFixed(1) + "K";
+  }
 
-      tl: getValue(row, [
-        "TL",
-        "TL Name",
-        "Team Leader"
-      ]),
+  return "₹" + formatNumber(number);
 
-      zm: getValue(row, [
-        "ZM",
-        "ZM Name",
-        "Zonal Manager"
-      ]),
+}
 
-      city: getValue(row, [
-        "City",
-        "Location"
-      ]),
 
-      zone: getValue(row, [
-        "Zone",
-        "Region"
-      ]),
+function percentage(numerator, denominator) {
 
-      trainer: getValue(row, [
-        "Trainer",
-        "Trainer Name"
-      ]),
+  if (numberValue(denominator) === 0) {
+    return 0;
+  }
 
-      appointments: numberValue(
-        getValue(row, [
-          "Appointments",
-          "Appointment",
-          "Appt"
-        ])
-      ),
+  return (
+    numberValue(numerator) /
+    numberValue(denominator)
+  ) * 100;
 
-      visits: numberValue(
-        getValue(row, [
-          "Visits",
-          "Visit"
-        ])
-      ),
+}
 
-      bookings: numberValue(
-        getValue(row, [
-          "Bookings",
-          "Booking"
-        ])
-      ),
 
-      ape: numberValue(
-        getValue(row, [
-          "APE"
-        ])
-      ),
+// ==========================================================
+// CALCULATE TOTALS
+// ==========================================================
 
-      my: numberValue(
-        getValue(row, [
-          "MY",
-          "Multi Year",
-          "Multi-Year"
-        ])
-      )
+function calculateTotals(data) {
 
-    };
+  let appt = 0;
+  let visit = 0;
+  let booking = 0;
+  let ape = 0;
+
+  data.forEach(record => {
+
+    appt += numberValue(getField(record, "appt"));
+    visit += numberValue(getField(record, "visit"));
+    booking += numberValue(getField(record, "booking"));
+    ape += numberValue(getField(record, "ape"));
 
   });
 
-}
-
-
-// ==========================================
-// PROCESS DASHBOARD
-// ==========================================
-
-function processDashboard() {
-
-  const normalisedData =
-    normalizeData(filteredData);
-
-  rmData =
-    createRMSummary(normalisedData);
-
-  updateDashboard();
-
-  renderRMTable();
-
-  renderZoneComparison();
-
-  renderTrainerComparison();
-
-  renderInsights();
+  return {
+    appt,
+    visit,
+    booking,
+    ape
+  };
 
 }
 
 
-// ==========================================
-// CREATE RM SUMMARY
-// ==========================================
+// ==========================================================
+// UNIQUE EMPLOYEE COUNT
+// ==========================================================
 
-function createRMSummary(data) {
+function uniqueEmployeeCount(data) {
 
-  const groups = {};
+  const employees = new Set();
 
-  data.forEach(row => {
+  data.forEach(record => {
 
-    const key =
-      row.ecode ||
-      row.username ||
-      row.name ||
-      "Unknown";
+    const code =
+      getField(record, "ecode") ||
+      getField(record, "username") ||
+      getField(record, "name");
 
-    if (!groups[key]) {
+    if (code) {
+      employees.add(String(code));
+    }
 
-      groups[key] = {
+  });
 
-        ecode: row.ecode,
-        username: row.username,
-        name: row.name,
-        doj: row.doj,
-        tl: row.tl,
-        zm: row.zm,
-        city: row.city,
-        zone: row.zone,
-        trainer: row.trainer,
+  return employees.size;
 
-        appointments: 0,
-        visits: 0,
-        bookings: 0,
+}
+
+
+// ==========================================================
+// UPDATE DASHBOARD
+// ==========================================================
+
+function updateDashboard() {
+
+  const totals = calculateTotals(filteredData);
+
+  const employees =
+    uniqueEmployeeCount(filteredData);
+
+  const visitPercent =
+    percentage(totals.visit, totals.appt);
+
+  const apptConversion =
+    percentage(totals.booking, totals.appt);
+
+  const visitConversion =
+    percentage(totals.booking, totals.visit);
+
+
+  document.getElementById(
+    "activeEmployees"
+  ).textContent = formatNumber(employees);
+
+
+  document.getElementById(
+    "totalAppt"
+  ).textContent = formatNumber(totals.appt);
+
+
+  document.getElementById(
+    "totalVisit"
+  ).textContent = formatNumber(totals.visit);
+
+
+  document.getElementById(
+    "totalBooking"
+  ).textContent = formatNumber(totals.booking);
+
+
+  document.getElementById(
+    "totalAPE"
+  ).textContent = formatAPE(totals.ape);
+
+
+  document.getElementById(
+    "visitPercent"
+  ).textContent =
+    visitPercent.toFixed(1) +
+    "% appointment → visit";
+
+
+  document.getElementById(
+    "apptConversion"
+  ).textContent =
+    apptConversion.toFixed(1) +
+    "% appointment conversion";
+
+
+  document.getElementById(
+    "visitBookingConversion"
+  ).textContent =
+    visitConversion.toFixed(1) + "%";
+
+
+  renderZonePerformance();
+  renderTopPerformers();
+
+}
+
+
+// ==========================================================
+// GROUP DATA BY EMPLOYEE
+// ==========================================================
+
+function groupByEmployee(data) {
+
+  const employees = {};
+
+  data.forEach(record => {
+
+    const id =
+      String(
+        getField(record, "ecode") ||
+        getField(record, "username") ||
+        getField(record, "name") ||
+        "Unknown"
+      );
+
+    if (!employees[id]) {
+
+      employees[id] = {
+        id,
+        records: [],
+        appt: 0,
+        visit: 0,
+        booking: 0,
         ape: 0,
-        my: 0,
-
-        rows: []
-
+        details: record
       };
 
     }
 
-    const rm = groups[key];
+    employees[id].records.push(record);
 
-    rm.appointments += row.appointments;
-    rm.visits += row.visits;
-    rm.bookings += row.bookings;
-    rm.ape += row.ape;
-    rm.my += row.my;
+    employees[id].appt +=
+      numberValue(getField(record, "appt"));
 
-    rm.rows.push(row);
+    employees[id].visit +=
+      numberValue(getField(record, "visit"));
 
-  });
+    employees[id].booking +=
+      numberValue(getField(record, "booking"));
 
-  return Object.values(groups).map(rm => {
-
-    rm.visitPercent =
-      calculatePercentage(
-        rm.visits,
-        rm.appointments
-      );
-
-    rm.appointmentConversion =
-      calculatePercentage(
-        rm.bookings,
-        rm.appointments
-      );
-
-    rm.visitConversion =
-      calculatePercentage(
-        rm.bookings,
-        rm.visits
-      );
-
-    rm.myShare =
-      calculatePercentage(
-        rm.my,
-        rm.ape
-      );
-
-    rm.tenureDays =
-      calculateTenure(rm.doj);
-
-    return rm;
+    employees[id].ape +=
+      numberValue(getField(record, "ape"));
 
   });
+
+  return Object.values(employees);
 
 }
 
 
-// ==========================================
-// DASHBOARD TOTALS
-// ==========================================
+// ==========================================================
+// TOP PERFORMERS
+// ==========================================================
 
-function updateDashboard() {
+function renderTopPerformers() {
 
-  let appointments = 0;
-  let visits = 0;
-  let bookings = 0;
-  let ape = 0;
-  let my = 0;
+  const container =
+    document.getElementById("topPerformers");
 
-  rmData.forEach(rm => {
+  const employees =
+    groupByEmployee(filteredData);
 
-    appointments += rm.appointments;
-    visits += rm.visits;
-    bookings += rm.bookings;
-    ape += rm.ape;
-    my += rm.my;
+  employees.sort((a, b) => b.ape - a.ape);
 
-  });
+  const topEmployees =
+    employees.slice(0, 5);
 
+  if (topEmployees.length === 0) {
 
-  const visitPercent =
-    calculatePercentage(
-      visits,
-      appointments
-    );
+    container.innerHTML =
+      "<p>No performance data available.</p>";
 
-  const appointmentConversion =
-    calculatePercentage(
-      bookings,
-      appointments
-    );
+    return;
 
-  const visitConversion =
-    calculatePercentage(
-      bookings,
-      visits
-    );
+  }
 
-  const myShare =
-    calculatePercentage(
-      my,
-      ape
-    );
+  container.innerHTML =
+    topEmployees.map((employee, index) => {
 
+      const record =
+        employee.details;
 
-  // These IDs will update if they exist in index.html
+      const name =
+        getField(record, "name") ||
+        getField(record, "username") ||
+        employee.id;
 
-  updateElement(
-    "kpiActiveRMs",
-    rmData.length
-  );
+      const zone =
+        getField(record, "zone") || "-";
 
-  updateElement(
-    "kpiAppointments",
-    formatNumber(appointments)
-  );
+      const city =
+        getField(record, "city") || "";
 
-  updateElement(
-    "kpiVisits",
-    formatNumber(visits)
-  );
+      return `
 
-  updateElement(
-    "kpiBookings",
-    formatNumber(bookings)
-  );
+        <div class="performer-row">
 
-  updateElement(
-    "kpiAPE",
-    formatCurrency(ape)
-  );
+          <div class="rank">
+            ${index + 1}
+          </div>
 
-  updateElement(
-    "kpiMY",
-    formatCurrency(my)
-  );
+          <div class="performer-info">
 
-  updateElement(
-    "kpiVisitPercent",
-    visitPercent.toFixed(1) + "%"
-  );
+            <h4>${escapeHTML(name)}</h4>
 
-  updateElement(
-    "kpiAppointmentConversion",
-    appointmentConversion.toFixed(1) + "%"
-  );
+            <p>
+              ${escapeHTML(zone)}
+              ${city ? " • " + escapeHTML(city) : ""}
+            </p>
 
-  updateElement(
-    "kpiVisitConversion",
-    visitConversion.toFixed(1) + "%"
-  );
+          </div>
 
-  updateElement(
-    "kpiMYShare",
-    myShare.toFixed(1) + "%"
-  );
+          <div class="performer-value">
+            ${formatAPE(employee.ape)}
+          </div>
 
+        </div>
 
-  console.log({
-    activeRMs: rmData.length,
-    appointments,
-    visits,
-    bookings,
-    ape,
-    my
-  });
+      `;
+
+    }).join("");
 
 }
 
 
-// ==========================================
-// POPULATE DROPDOWNS
-// ==========================================
+// ==========================================================
+// ZONE PERFORMANCE
+// ==========================================================
 
-function populateDropdowns() {
+function groupByZone(data) {
 
-  populateDropdown(
+  const zones = {};
+
+  data.forEach(record => {
+
+    const zone =
+      getField(record, "zone") ||
+      "Not Assigned";
+
+    if (!zones[zone]) {
+
+      zones[zone] = {
+        zone,
+        records: [],
+        appt: 0,
+        visit: 0,
+        booking: 0,
+        ape: 0
+      };
+
+    }
+
+    zones[zone].records.push(record);
+
+    zones[zone].appt +=
+      numberValue(getField(record, "appt"));
+
+    zones[zone].visit +=
+      numberValue(getField(record, "visit"));
+
+    zones[zone].booking +=
+      numberValue(getField(record, "booking"));
+
+    zones[zone].ape +=
+      numberValue(getField(record, "ape"));
+
+  });
+
+  return Object.values(zones);
+
+}
+
+
+function renderZonePerformance() {
+
+  const container =
+    document.getElementById("zonePerformance");
+
+  const zones =
+    groupByZone(filteredData);
+
+  zones.sort((a, b) => b.ape - a.ape);
+
+  const maxAPE =
+    Math.max(...zones.map(zone => zone.ape), 1);
+
+  if (zones.length === 0) {
+
+    container.innerHTML =
+      "<p>No zone data available.</p>";
+
+    return;
+
+  }
+
+  container.innerHTML =
+    zones.map(zone => {
+
+      const width =
+        (zone.ape / maxAPE) * 100;
+
+      return `
+
+        <div class="zone-row">
+
+          <div class="zone-row-top">
+
+            <strong>
+              ${escapeHTML(zone.zone)}
+            </strong>
+
+            <span>
+              ${formatAPE(zone.ape)}
+            </span>
+
+          </div>
+
+          <div class="progress-bg">
+
+            <div
+              class="progress-fill"
+              style="width: ${width}%"
+            ></div>
+
+          </div>
+
+        </div>
+
+      `;
+
+    }).join("");
+
+}
+
+
+// ==========================================================
+// ZONE COMPARISON TABLE
+// ==========================================================
+
+function updateZoneComparison() {
+
+  const tbody =
+    document.getElementById(
+      "zoneComparisonTable"
+    );
+
+  const zones =
+    groupByZone(filteredData);
+
+  zones.sort((a, b) => b.ape - a.ape);
+
+  tbody.innerHTML =
+    zones.map(zone => {
+
+      const employeeCount =
+        uniqueEmployeeCount(zone.records);
+
+      const visitPercent =
+        percentage(
+          zone.visit,
+          zone.appt
+        );
+
+      const apptConversion =
+        percentage(
+          zone.booking,
+          zone.appt
+        );
+
+      const visitConversion =
+        percentage(
+          zone.booking,
+          zone.visit
+        );
+
+      return `
+
+        <tr>
+
+          <td>
+            <strong>
+              ${escapeHTML(zone.zone)}
+            </strong>
+          </td>
+
+          <td>
+            ${formatNumber(employeeCount)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.appt)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.visit)}
+          </td>
+
+          <td>
+            ${formatNumber(zone.booking)}
+          </td>
+
+          <td>
+            ${formatAPE(zone.ape)}
+          </td>
+
+          <td>
+            ${visitPercent.toFixed(1)}%
+          </td>
+
+          <td>
+            ${apptConversion.toFixed(1)}%
+          </td>
+
+          <td>
+            ${visitConversion.toFixed(1)}%
+          </td>
+
+        </tr>
+
+      `;
+
+    }).join("");
+
+}
+
+
+// ==========================================================
+// FILTERS
+// ==========================================================
+
+function populateAllFilters() {
+
+  populateFilter(
     "zoneFilter",
-    allData.map(row =>
-      getValue(row, ["Zone"])
-    )
+    getUniqueValues(rawData, "zone")
   );
 
-  populateDropdown(
+  populateFilter(
     "cityFilter",
-    allData.map(row =>
-      getValue(row, ["City"])
-    )
+    getUniqueValues(rawData, "city")
   );
 
-  populateDropdown(
+  populateFilter(
     "tlFilter",
-    allData.map(row =>
-      getValue(row, ["TL", "TL Name"])
-    )
+    getUniqueValues(rawData, "tl")
   );
 
-  populateDropdown(
+  populateFilter(
     "zmFilter",
-    allData.map(row =>
-      getValue(row, ["ZM", "ZM Name"])
-    )
+    getUniqueValues(rawData, "zm")
   );
 
-  populateDropdown(
-    "trainerFilter",
-    allData.map(row =>
-      getValue(row, ["Trainer", "Trainer Name"])
-    )
+  populateFilter(
+    "dataZoneFilter",
+    getUniqueValues(rawData, "zone")
   );
 
 }
 
 
-function populateDropdown(id, values) {
+function getUniqueValues(data, field) {
 
-  const dropdown =
-    document.getElementById(id);
+  const values = new Set();
 
-  if (!dropdown) return;
+  data.forEach(record => {
+
+    const value =
+      getField(record, field);
+
+    if (value) {
+      values.add(String(value));
+    }
+
+  });
+
+  return [...values]
+    .sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+}
+
+
+function populateFilter(
+  elementId,
+  values
+) {
+
+  const select =
+    document.getElementById(elementId);
 
   const currentValue =
-    dropdown.value;
+    select.value;
 
-  const uniqueValues =
-    [...new Set(
-      values
-        .filter(value =>
-          value !== "" &&
-          value !== null &&
-          value !== undefined
-        )
-        .map(value =>
-          String(value).trim()
-        )
-    )].sort();
+  const firstOption =
+    select.options[0]
+      ? select.options[0].outerHTML
+      : "";
 
-  dropdown.innerHTML =
-    '<option value="">All</option>';
+  select.innerHTML = firstOption;
 
-  uniqueValues.forEach(value => {
+  values.forEach(value => {
 
     const option =
       document.createElement("option");
 
     option.value = value;
-
     option.textContent = value;
 
-    dropdown.appendChild(option);
+    select.appendChild(option);
 
   });
 
-  dropdown.value =
-    currentValue;
+  select.value = currentValue;
 
 }
 
-
-// ==========================================
-// SETUP FILTERS
-// ==========================================
 
 function setupFilters() {
 
   const filters = [
-
-    "globalSearch",
     "zoneFilter",
     "cityFilter",
     "tlFilter",
-    "zmFilter",
-    "trainerFilter",
-    "dateFrom",
-    "dateTo"
-
+    "zmFilter"
   ];
 
   filters.forEach(id => {
 
-    const element =
-      document.getElementById(id);
-
-    if (!element) return;
-
-    element.addEventListener(
-      "input",
-      applyFilters
-    );
-
-    element.addEventListener(
-      "change",
-      applyFilters
-    );
+    document
+      .getElementById(id)
+      .addEventListener(
+        "change",
+        applyFilters
+      );
 
   });
+
+
+  document
+    .getElementById("clearFilters")
+    .addEventListener("click", () => {
+
+      filters.forEach(id => {
+        document
+          .getElementById(id)
+          .value = "";
+      });
+
+      applyFilters();
+
+    });
 
 }
 
 
-// ==========================================
-// APPLY FILTERS
-// ==========================================
-
 function applyFilters() {
 
-  const search =
-    getFilterValue("globalSearch")
-      .toLowerCase();
-
   const zone =
-    getFilterValue("zoneFilter");
+    document
+      .getElementById("zoneFilter")
+      .value;
 
   const city =
-    getFilterValue("cityFilter");
+    document
+      .getElementById("cityFilter")
+      .value;
 
   const tl =
-    getFilterValue("tlFilter");
+    document
+      .getElementById("tlFilter")
+      .value;
 
   const zm =
-    getFilterValue("zmFilter");
-
-  const trainer =
-    getFilterValue("trainerFilter");
+    document
+      .getElementById("zmFilter")
+      .value;
 
 
   filteredData =
-    allData.filter(row => {
-
-      const ecode =
-        String(
-          getValue(row, [
-            "Ecode",
-            "E-Code",
-            "E Code"
-          ])
-        ).toLowerCase();
-
-      const username =
-        String(
-          getValue(row, [
-            "Username",
-            "User Name"
-          ])
-        ).toLowerCase();
-
-      const name =
-        String(
-          getValue(row, [
-            "Name",
-            "RM Name"
-          ])
-        ).toLowerCase();
-
-
-      const rowZone =
-        String(
-          getValue(row, ["Zone"])
-        );
-
-      const rowCity =
-        String(
-          getValue(row, ["City"])
-        );
-
-      const rowTL =
-        String(
-          getValue(row, [
-            "TL",
-            "TL Name"
-          ])
-        );
-
-      const rowZM =
-        String(
-          getValue(row, [
-            "ZM",
-            "ZM Name"
-          ])
-        );
-
-      const rowTrainer =
-        String(
-          getValue(row, [
-            "Trainer",
-            "Trainer Name"
-          ])
-        );
-
-
-      if (
-        search &&
-        !(
-          ecode.includes(search) ||
-          username.includes(search) ||
-          name.includes(search)
-        )
-      ) {
-        return false;
-      }
-
+    rawData.filter(record => {
 
       if (
         zone &&
-        rowZone !== zone
+        String(
+          getField(record, "zone")
+        ) !== zone
       ) {
         return false;
       }
-
 
       if (
         city &&
-        rowCity !== city
+        String(
+          getField(record, "city")
+        ) !== city
       ) {
         return false;
       }
-
 
       if (
         tl &&
-        rowTL !== tl
+        String(
+          getField(record, "tl")
+        ) !== tl
       ) {
         return false;
       }
-
 
       if (
         zm &&
-        rowZM !== zm
+        String(
+          getField(record, "zm")
+        ) !== zm
       ) {
         return false;
       }
-
-
-      if (
-        trainer &&
-        rowTrainer !== trainer
-      ) {
-        return false;
-      }
-
 
       return true;
 
     });
 
-
-  processDashboard();
+  updateDashboard();
+  updateZoneComparison();
+  updateAllDataTable();
 
 }
 
 
-// ==========================================
-// RM PERFORMANCE TABLE
-// ==========================================
+// ==========================================================
+// EMPLOYEE SEARCH
+// ==========================================================
 
-function renderRMTable() {
+function setupEmployeeSearch() {
 
-  const table =
-    document.getElementById("rmTable");
-
-  if (!table) return;
-
-  const tbody =
-    table.querySelector("tbody");
-
-  if (!tbody) return;
-
-
-  const sortedData =
-    [...rmData].sort(
-      (a, b) =>
-        b.ape - a.ape
+  document
+    .getElementById(
+      "employeeSearchBtn"
+    )
+    .addEventListener(
+      "click",
+      searchEmployee
     );
 
 
-  if (!sortedData.length) {
+  document
+    .getElementById(
+      "employeeSearch"
+    )
+    .addEventListener(
+      "keydown",
+      event => {
 
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="20">
-          No data available
-        </td>
-      </tr>
-    `;
+        if (event.key === "Enter") {
+          searchEmployee();
+        }
+
+      }
+    );
+
+}
+
+
+function searchEmployee() {
+
+  const search =
+    document
+      .getElementById(
+        "employeeSearch"
+      )
+      .value
+      .trim()
+      .toLowerCase();
+
+
+  if (!search) {
+    return;
+  }
+
+
+  const matchingRecords =
+    rawData.filter(record => {
+
+      const searchableText = [
+
+        getField(record, "ecode"),
+
+        getField(record, "username"),
+
+        getField(record, "name")
+
+      ]
+        .join(" ")
+        .toLowerCase();
+
+
+      return searchableText
+        .includes(search);
+
+    });
+
+
+  if (matchingRecords.length === 0) {
+
+    document
+      .getElementById(
+        "employeeDetails"
+      )
+      .classList.add("hidden");
+
+
+    document
+      .getElementById(
+        "employeeNotFound"
+      )
+      .textContent =
+        "No employee found with this E-Code, Username or Name.";
+
+
+    document
+      .getElementById(
+        "employeeNotFound"
+      )
+      .classList.remove("hidden");
 
     return;
 
   }
 
 
-  tbody.innerHTML =
-    sortedData.map(rm => `
-
-      <tr>
-
-        <td>${escapeHTML(rm.ecode)}</td>
-
-        <td>${escapeHTML(rm.username)}</td>
-
-        <td>
-          <strong>
-            ${escapeHTML(rm.name)}
-          </strong>
-        </td>
-
-        <td>${formatDate(rm.doj)}</td>
-
-        <td>
-          ${formatTenure(rm.tenureDays)}
-        </td>
-
-        <td>${escapeHTML(rm.tl)}</td>
-
-        <td>${escapeHTML(rm.zm)}</td>
-
-        <td>${escapeHTML(rm.city)}</td>
-
-        <td>${escapeHTML(rm.zone)}</td>
-
-        <td>${escapeHTML(rm.trainer)}</td>
-
-        <td>
-          ${formatNumber(rm.appointments)}
-        </td>
-
-        <td>
-          ${formatNumber(rm.visits)}
-        </td>
-
-        <td>
-          ${formatNumber(rm.bookings)}
-        </td>
-
-        <td>
-          ${rm.visitPercent.toFixed(1)}%
-        </td>
-
-        <td>
-          ${rm.appointmentConversion.toFixed(1)}%
-        </td>
-
-        <td>
-          ${rm.visitConversion.toFixed(1)}%
-        </td>
-
-        <td>
-          ${formatCurrency(rm.ape)}
-        </td>
-
-        <td>
-          ${formatCurrency(rm.my)}
-        </td>
-
-        <td>
-          ${rm.myShare.toFixed(1)}%
-        </td>
-
-      </tr>
-
-    `).join("");
-
-}
-
-
-// ==========================================
-// ZONE COMPARISON
-// ==========================================
-
-function renderZoneComparison() {
-
-  const groups =
-    groupData(
-      rmData,
-      "zone"
-    );
-
-  const table =
-    document.getElementById(
-      "zoneTable"
-    );
-
-  if (!table) return;
-
-  const tbody =
-    table.querySelector("tbody");
-
-  if (!tbody) return;
-
-
-  tbody.innerHTML =
-    groups.map(group => `
-
-      <tr>
-
-        <td>
-          <strong>
-            ${escapeHTML(group.name)}
-          </strong>
-        </td>
-
-        <td>
-          ${group.rms}
-        </td>
-
-        <td>
-          ${formatNumber(
-            group.appointments
-          )}
-        </td>
-
-        <td>
-          ${formatNumber(
-            group.visits
-          )}
-        </td>
-
-        <td>
-          ${formatNumber(
-            group.bookings
-          )}
-        </td>
-
-        <td>
-          ${group.visitPercent.toFixed(1)}%
-        </td>
-
-        <td>
-          ${group.appointmentConversion.toFixed(1)}%
-        </td>
-
-        <td>
-          ${group.visitConversion.toFixed(1)}%
-        </td>
-
-        <td>
-          ${formatCurrency(group.ape)}
-        </td>
-
-        <td>
-          ${formatCurrency(group.my)}
-        </td>
-
-        <td>
-          ${group.myShare.toFixed(1)}%
-        </td>
-
-      </tr>
-
-    `).join("");
-
-}
-
-
-// ==========================================
-// TRAINER / TL / ZM COMPARISON
-// ==========================================
-
-function renderTrainerComparison() {
-
-  renderGroupTable(
-    "trainerTable",
-    groupData(rmData, "trainer")
-  );
-
-  renderGroupTable(
-    "tlTable",
-    groupData(rmData, "tl")
-  );
-
-  renderGroupTable(
-    "zmTable",
-    groupData(rmData, "zm")
+  displayEmployee(
+    matchingRecords
   );
 
 }
 
 
-function renderGroupTable(
-  tableId,
-  groups
-) {
-
-  const table =
-    document.getElementById(tableId);
-
-  if (!table) return;
-
-  const tbody =
-    table.querySelector("tbody");
-
-  if (!tbody) return;
-
-
-  tbody.innerHTML =
-    groups.map(group => `
-
-      <tr>
-
-        <td>
-          <strong>
-            ${escapeHTML(group.name)}
-          </strong>
-        </td>
-
-        <td>
-          ${group.rms}
-        </td>
-
-        <td>
-          ${formatNumber(group.bookings)}
-        </td>
-
-        <td>
-          ${formatCurrency(group.ape)}
-        </td>
-
-        <td>
-          ${group.visitConversion.toFixed(1)}%
-        </td>
-
-        <td>
-          ${group.myShare.toFixed(1)}%
-        </td>
-
-      </tr>
-
-    `).join("");
-
-}
-
-
-// ==========================================
-// GROUP DATA
-// ==========================================
-
-function groupData(data, field) {
-
-  const groups = {};
-
-  data.forEach(rm => {
-
-    const name =
-      rm[field] ||
-      "Not Available";
-
-    if (!groups[name]) {
-
-      groups[name] = {
-
-        name: name,
-
-        rms: 0,
-
-        appointments: 0,
-
-        visits: 0,
-
-        bookings: 0,
-
-        ape: 0,
-
-        my: 0
-
-      };
-
-    }
-
-
-    groups[name].rms++;
-
-    groups[name].appointments +=
-      rm.appointments;
-
-    groups[name].visits +=
-      rm.visits;
-
-    groups[name].bookings +=
-      rm.bookings;
-
-    groups[name].ape +=
-      rm.ape;
-
-    groups[name].my +=
-      rm.my;
-
-  });
-
-
-  return Object.values(groups)
-    .map(group => {
-
-      group.visitPercent =
-        calculatePercentage(
-          group.visits,
-          group.appointments
-        );
-
-      group.appointmentConversion =
-        calculatePercentage(
-          group.bookings,
-          group.appointments
-        );
-
-      group.visitConversion =
-        calculatePercentage(
-          group.bookings,
-          group.visits
-        );
-
-      group.myShare =
-        calculatePercentage(
-          group.my,
-          group.ape
-        );
-
-      return group;
-
-    })
-    .sort(
-      (a, b) =>
-        b.ape - a.ape
-    );
-
-}
-
-
-// ==========================================
-// INSIGHTS
-// ==========================================
-
-function renderInsights() {
-
-  const container =
-    document.getElementById(
-      "insightsContainer"
-    );
-
-  if (!container) return;
-
-
-  const lowVisit =
-    rmData.filter(rm =>
-      rm.appointments > 0 &&
-      rm.visitPercent < 50
-    );
-
-
-  const lowConversion =
-    rmData.filter(rm =>
-      rm.visits > 0 &&
-      rm.visitConversion < 20
-    );
-
-
-  const highPerformers =
-    [...rmData]
-      .sort(
-        (a, b) =>
-          b.ape - a.ape
-      )
-      .slice(0, 5);
-
-
-  container.innerHTML = `
-
-    <div class="insight-box">
-
-      <h3>
-        Low Visit %
-      </h3>
-
-      <p>
-        ${lowVisit.length}
-        RM(s) have Visit % below 50%.
-      </p>
-
-    </div>
-
-
-    <div class="insight-box">
-
-      <h3>
-        Low Conversion
-      </h3>
-
-      <p>
-        ${lowConversion.length}
-        RM(s) have Visit Conversion below 20%.
-      </p>
-
-    </div>
-
-
-    <div class="insight-box">
-
-      <h3>
-        Top Performers
-      </h3>
-
-      <p>
-        ${
-          highPerformers
-            .map(rm =>
-              rm.name ||
-              rm.ecode
-            )
-            .join(", ")
-        }
-      </p>
-
-    </div>
-
-  `;
-
-}
-
-
-// ==========================================
-// REFRESH BUTTON
-// ==========================================
-
-function setupRefreshButton() {
-
-  const button =
-    document.getElementById(
-      "refreshBtn"
-    );
-
-  if (!button) return;
-
-  button.addEventListener(
-    "click",
-    function () {
-
-      loadGoogleSheetData();
-
-    }
-  );
-
-}
-
-
-// ==========================================
-// NAVIGATION
-// ==========================================
-
-function setupNavigation() {
-
-  const items =
-    document.querySelectorAll(
-      ".nav-item"
-    );
-
-  items.forEach(item => {
-
-    item.addEventListener(
-      "click",
-      function () {
-
-        items.forEach(nav =>
-          nav.classList.remove("active")
-        );
-
-        this.classList.add("active");
-
-      }
-    );
-
-  });
-
-}
-
-
-// ==========================================
-// HELPER FUNCTIONS
-// ==========================================
-
-function calculatePercentage(
-  numerator,
-  denominator
-) {
-
-  if (!denominator) return 0;
-
-  return (
-    numerator /
-    denominator
-  ) * 100;
-
-}
-
-
-function calculateTenure(doj) {
-
-  if (!doj) return 0;
-
-  const joiningDate =
-    new Date(doj);
-
-  if (
-    isNaN(
-      joiningDate.getTime()
+function displayEmployee(records) {
+
+  document
+    .getElementById(
+      "employeeDetails"
     )
-  ) {
-    return 0;
-  }
+    .classList.remove("hidden");
 
-  const today =
-    new Date();
 
-  const difference =
-    today -
-    joiningDate;
+  document
+    .getElementById(
+      "employeeNotFound"
+    )
+    .classList.add("hidden");
 
-  return Math.floor(
-    difference /
-    (1000 * 60 * 60 * 24)
-  );
+
+  const first =
+    records[0];
+
+
+  const totals =
+    calculateTotals(records);
+
+
+  const name =
+    getField(first, "name") ||
+    getField(first, "username") ||
+    "Employee";
+
+
+  document
+    .getElementById("empName")
+    .textContent = name;
+
+
+  document
+    .getElementById("empCode")
+    .textContent =
+      "E-Code: " +
+      (
+        getField(first, "ecode") ||
+        "-"
+      );
+
+
+  document
+    .getElementById("empUsername")
+    .textContent =
+      getField(first, "username") ||
+      "-";
+
+
+  document
+    .getElementById("empDOJ")
+    .textContent =
+      formatDate(
+        getField(first, "doj")
+      );
+
+
+  document
+    .getElementById("empTenure")
+    .textContent =
+      getTenure(
+        getField(first, "doj"),
+        getField(first, "tenure")
+      );
+
+
+  document
+    .getElementById("empTL")
+    .textContent =
+      getField(first, "tl") ||
+      "-";
+
+
+  document
+    .getElementById("empZM")
+    .textContent =
+      getField(first, "zm") ||
+      "-";
+
+
+  document
+    .getElementById("empCity")
+    .textContent =
+      getField(first, "city") ||
+      "-";
+
+
+  document
+    .getElementById("empZone")
+    .textContent =
+      getField(first, "zone") ||
+      "-";
+
+
+  document
+    .getElementById("empTrainer")
+    .textContent =
+      getField(first, "trainer") ||
+      "-";
+
+
+  document
+    .getElementById("empAppt")
+    .textContent =
+      formatNumber(totals.appt);
+
+
+  document
+    .getElementById("empVisit")
+    .textContent =
+      formatNumber(totals.visit);
+
+
+  document
+    .getElementById("empBooking")
+    .textContent =
+      formatNumber(totals.booking);
+
+
+  document
+    .getElementById("empAPE")
+    .textContent =
+      formatAPE(totals.ape);
+
+
+  document
+    .getElementById("empApptConv")
+    .textContent =
+      percentage(
+        totals.booking,
+        totals.appt
+      ).toFixed(1) + "%";
+
+
+  document
+    .getElementById("empVisitConv")
+    .textContent =
+      percentage(
+        totals.booking,
+        totals.visit
+      ).toFixed(1) + "%";
+
+
+  renderEmployeeDateTable(records);
 
 }
 
 
-function formatTenure(days) {
+// ==========================================================
+// DATE WISE TABLE
+// ==========================================================
 
-  if (!days) return "-";
+function renderEmployeeDateTable(records) {
 
-  if (days < 30) {
-    return days + " Days";
-  }
-
-  const months =
-    Math.floor(days / 30);
-
-  if (months < 12) {
-    return months + " Months";
-  }
-
-  const years =
-    Math.floor(months / 12);
-
-  const remainingMonths =
-    months % 12;
-
-  return (
-    years +
-    "Y " +
-    remainingMonths +
-    "M"
-  );
-
-}
-
-
-function formatNumber(value) {
-
-  return Number(value || 0)
-    .toLocaleString("en-IN");
-
-}
-
-
-function formatCurrency(value) {
-
-  value =
-    Number(value || 0);
-
-  if (value >= 10000000) {
-
-    return (
-      "₹" +
-      (value / 10000000)
-        .toFixed(2) +
-      " Cr"
+  const tbody =
+    document.getElementById(
+      "employeeDateTable"
     );
 
-  }
 
-  if (value >= 100000) {
+  tbody.innerHTML =
+    records.map(record => {
 
-    return (
-      "₹" +
-      (value / 100000)
-        .toFixed(2) +
-      " L"
-    );
+      const appt =
+        numberValue(
+          getField(record, "appt")
+        );
 
-  }
+      const visit =
+        numberValue(
+          getField(record, "visit")
+        );
 
-  return (
-    "₹" +
-    value.toLocaleString("en-IN")
-  );
+      const booking =
+        numberValue(
+          getField(record, "booking")
+        );
+
+      const ape =
+        numberValue(
+          getField(record, "ape")
+        );
+
+      return `
+
+        <tr>
+
+          <td>
+            ${formatDate(
+              getField(record, "date")
+            ) || "-"}
+          </td>
+
+          <td>
+            ${formatNumber(appt)}
+          </td>
+
+          <td>
+            ${formatNumber(visit)}
+          </td>
+
+          <td>
+            ${formatNumber(booking)}
+          </td>
+
+          <td>
+            ${formatAPE(ape)}
+          </td>
+
+          <td>
+            ${percentage(
+              booking,
+              appt
+            ).toFixed(1)}%
+          </td>
+
+          <td>
+            ${percentage(
+              booking,
+              visit
+            ).toFixed(1)}%
+          </td>
+
+        </tr>
+
+      `;
+
+    }).join("");
 
 }
 
+
+// ==========================================================
+// DATE FORMAT
+// ==========================================================
 
 function formatDate(value) {
 
-  if (!value) return "-";
+  if (!value) {
+    return "";
+  }
 
   const date =
     new Date(value);
@@ -1437,7 +1372,7 @@ function formatDate(value) {
   if (
     isNaN(date.getTime())
   ) {
-    return value;
+    return String(value);
   }
 
   return date.toLocaleDateString(
@@ -1452,60 +1387,583 @@ function formatDate(value) {
 }
 
 
-function getFilterValue(id) {
+// ==========================================================
+// TENURE
+// ==========================================================
 
-  const element =
-    document.getElementById(id);
-
-  if (!element) return "";
-
-  return (
-    element.value || ""
-  ).trim();
-
-}
-
-
-function updateElement(
-  id,
-  value
+function getTenure(
+  doj,
+  existingTenure
 ) {
 
-  const element =
-    document.getElementById(id);
-
-  if (element) {
-
-    element.textContent =
-      value;
-
+  if (existingTenure) {
+    return existingTenure;
   }
+
+  if (!doj) {
+    return "-";
+  }
+
+  const joiningDate =
+    new Date(doj);
+
+  if (
+    isNaN(
+      joiningDate.getTime()
+    )
+  ) {
+    return "-";
+  }
+
+  const today =
+    new Date();
+
+  let months =
+    (today.getFullYear() -
+      joiningDate.getFullYear()) *
+    12;
+
+  months +=
+    today.getMonth() -
+    joiningDate.getMonth();
+
+
+  if (months < 0) {
+    return "-";
+  }
+
+  const years =
+    Math.floor(months / 12);
+
+  const remainingMonths =
+    months % 12;
+
+
+  if (years === 0) {
+    return remainingMonths + " months";
+  }
+
+  return (
+    years +
+    "y " +
+    remainingMonths +
+    "m"
+  );
 
 }
 
 
-function showStatus(message) {
+// ==========================================================
+// ALL DATA TABLE
+// ==========================================================
 
-  const status =
-    document.getElementById(
-      "dataStatus"
+function updateAllDataTable() {
+
+  const search =
+    document
+      .getElementById(
+        "tableSearch"
+      )?.value
+      ?.toLowerCase() || "";
+
+
+  const selectedZone =
+    document
+      .getElementById(
+        "dataZoneFilter"
+      )?.value || "";
+
+
+  let data =
+    [...rawData];
+
+
+  if (selectedZone) {
+
+    data = data.filter(record =>
+      String(
+        getField(record, "zone")
+      ) === selectedZone
     );
 
-  if (status) {
+  }
 
-    status.textContent =
-      message;
+
+  if (search) {
+
+    data = data.filter(record => {
+
+      const text =
+        Object.values(record)
+          .join(" ")
+          .toLowerCase();
+
+      return text.includes(search);
+
+    });
 
   }
 
-  console.log(message);
+
+  const importantFields = [
+
+    {
+      label: "E-Code",
+      field: "ecode"
+    },
+
+    {
+      label: "Username",
+      field: "username"
+    },
+
+    {
+      label: "Name",
+      field: "name"
+    },
+
+    {
+      label: "TL",
+      field: "tl"
+    },
+
+    {
+      label: "ZM",
+      field: "zm"
+    },
+
+    {
+      label: "City",
+      field: "city"
+    },
+
+    {
+      label: "Zone",
+      field: "zone"
+    },
+
+    {
+      label: "Trainer",
+      field: "trainer"
+    },
+
+    {
+      label: "Date",
+      field: "date"
+    },
+
+    {
+      label: "Appt",
+      field: "appt"
+    },
+
+    {
+      label: "Visit",
+      field: "visit"
+    },
+
+    {
+      label: "Booking",
+      field: "booking"
+    },
+
+    {
+      label: "APE",
+      field: "ape"
+    }
+
+  ];
+
+
+  const thead =
+    document.getElementById(
+      "allDataHead"
+    );
+
+
+  thead.innerHTML = `
+
+    <tr>
+
+      ${importantFields.map(column => `
+        <th>
+          ${column.label}
+        </th>
+      `).join("")}
+
+    </tr>
+
+  `;
+
+
+  const tbody =
+    document.getElementById(
+      "allDataBody"
+    );
+
+
+  tbody.innerHTML =
+    data.slice(0, 500)
+      .map(record => {
+
+        return `
+
+          <tr>
+
+            ${importantFields.map(column => {
+
+              let value =
+                getField(
+                  record,
+                  column.field
+                );
+
+              if (
+                column.field === "ape"
+              ) {
+                value =
+                  formatAPE(value);
+              }
+
+              if (
+                column.field === "appt" ||
+                column.field === "visit" ||
+                column.field === "booking"
+              ) {
+                value =
+                  formatNumber(value);
+              }
+
+              if (
+                column.field === "date"
+              ) {
+                value =
+                  formatDate(value);
+              }
+
+              return `
+                <td>
+                  ${escapeHTML(
+                    String(value || "-")
+                  )}
+                </td>
+              `;
+
+            }).join("")}
+
+          </tr>
+
+        `;
+
+      }).join("");
 
 }
 
+
+// ==========================================================
+// GLOBAL SEARCH
+// ==========================================================
+
+function setupGlobalSearch() {
+
+  document
+    .getElementById(
+      "globalSearch"
+    )
+    .addEventListener(
+      "keydown",
+      event => {
+
+        if (event.key === "Enter") {
+
+          const value =
+            event.target.value;
+
+          document
+            .querySelector(
+              '[data-page="employee"]'
+            )
+            .click();
+
+
+          document
+            .getElementById(
+              "employeeSearch"
+            )
+            .value = value;
+
+
+          searchEmployee();
+
+        }
+
+      }
+    );
+
+}
+
+
+// ==========================================================
+// DATA SEARCH
+// ==========================================================
+
+function setupDataSearch() {
+
+  document
+    .getElementById(
+      "tableSearch"
+    )
+    .addEventListener(
+      "input",
+      updateAllDataTable
+    );
+
+
+  document
+    .getElementById(
+      "dataZoneFilter"
+    )
+    .addEventListener(
+      "change",
+      updateAllDataTable
+    );
+
+}
+
+
+// ==========================================================
+// NAVIGATION
+// ==========================================================
+
+function setupNavigation() {
+
+  const buttons =
+    document.querySelectorAll(
+      ".nav-btn"
+    );
+
+
+  buttons.forEach(button => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        buttons.forEach(btn =>
+          btn.classList.remove(
+            "active"
+          )
+        );
+
+        button.classList.add(
+          "active"
+        );
+
+
+        const page =
+          button.dataset.page;
+
+
+        document
+          .querySelectorAll(
+            ".page"
+          )
+          .forEach(section =>
+            section.classList.remove(
+              "active-page"
+            )
+          );
+
+
+        document
+          .getElementById(
+            page + "Page"
+          )
+          .classList.add(
+            "active-page"
+          );
+
+
+        updatePageHeading(page);
+
+      }
+    );
+
+  });
+
+}
+
+
+function updatePageHeading(page) {
+
+  const title =
+    document.getElementById(
+      "pageTitle"
+    );
+
+  const subtitle =
+    document.getElementById(
+      "pageSubtitle"
+    );
+
+
+  const headings = {
+
+    dashboard: [
+      "Performance Dashboard",
+      "Live performance data from Google Sheets"
+    ],
+
+    employee: [
+      "Employee Performance",
+      "Individual employee analysis"
+    ],
+
+    comparison: [
+      "Zone Comparison",
+      "Compare performance across Zones"
+    ],
+
+    data: [
+      "All Data",
+      "Live records from Google Sheets"
+    ]
+
+  };
+
+
+  title.textContent =
+    headings[page][0];
+
+  subtitle.textContent =
+    headings[page][1];
+
+}
+
+
+// ==========================================================
+// REFRESH BUTTONS
+// ==========================================================
+
+function setupRefreshButtons() {
+
+  document
+    .getElementById(
+      "refreshBtn"
+    )
+    .addEventListener(
+      "click",
+      loadGoogleSheetData
+    );
+
+
+  document
+    .getElementById(
+      "refreshTopBtn"
+    )
+    .addEventListener(
+      "click",
+      loadGoogleSheetData
+    );
+
+}
+
+
+// ==========================================================
+// LOADING
+// ==========================================================
+
+function showLoading(show) {
+
+  const loading =
+    document.getElementById(
+      "loading"
+    );
+
+  if (show) {
+
+    loading.classList.remove(
+      "hidden"
+    );
+
+  } else {
+
+    loading.classList.add(
+      "hidden"
+    );
+
+  }
+
+}
+
+
+// ==========================================================
+// ERROR
+// ==========================================================
+
+function showError(message) {
+
+  const box =
+    document.getElementById(
+      "errorBox"
+    );
+
+  document
+    .getElementById(
+      "errorText"
+    )
+    .textContent = message;
+
+
+  box.classList.remove(
+    "hidden"
+  );
+
+}
+
+
+function hideError() {
+
+  document
+    .getElementById(
+      "errorBox"
+    )
+    .classList.add(
+      "hidden"
+    );
+
+}
+
+
+// ==========================================================
+// LAST UPDATED
+// ==========================================================
+
+function updateLastUpdated() {
+
+  const now =
+    new Date();
+
+  document
+    .getElementById(
+      "lastUpdated"
+    )
+    .textContent =
+      "Updated: " +
+      now.toLocaleTimeString(
+        "en-IN"
+      );
+
+}
+
+
+// ==========================================================
+// SAFE HTML
+// ==========================================================
 
 function escapeHTML(value) {
 
-  return String(value || "")
+  return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

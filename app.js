@@ -1,40 +1,185 @@
-// =========================================================
-// FOS PERFORMANCE PORTAL
-// LIVE GOOGLE SHEET CONNECTION
-// =========================================================
+// ============================================
+// FOS PERFORMANCE PORTAL - LIVE DATA
+// ============================================
 
-
-// YOUR GOOGLE APPS SCRIPT API
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbzU_SubIsUJaJ-ffGnp_yRc8CvEXMRZB4eccAAVa6qTmhp6RwLI8-LK-wVwwzo1gRc/exec";
 
 
-// =========================================================
-// GLOBAL DATA
-// =========================================================
-
+let allData = [];
 let headers = [];
 let rawRows = [];
-let allData = [];
 let filteredData = [];
 
 
-// =========================================================
-// START WEBSITE
-// =========================================================
+// ============================================
+// COLUMN NAME HELPERS
+// ============================================
+
+
+function normalizeText(value) {
+
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+
+}
+
+
+// Find a column using multiple possible names
+
+function findColumnIndex(possibleNames) {
+
+  const normalizedNames =
+    possibleNames.map(function (name) {
+
+      return normalizeText(name);
+
+    });
+
+
+  return headers.findIndex(function (header) {
+
+    const normalizedHeader =
+      normalizeText(header);
+
+
+    return normalizedNames.some(function (name) {
+
+      return (
+        normalizedHeader === name ||
+        normalizedHeader.includes(name)
+      );
+
+    });
+
+  });
+
+}
+
+
+// ============================================
+// GET VALUE FROM ROW
+// ============================================
+
+
+function getValue(row, index) {
+
+  if (
+    index === -1 ||
+    index === undefined
+  ) {
+
+    return "";
+
+  }
+
+
+  const key =
+    headers[index] +
+    "__" +
+    index;
+
+
+  return row[key] ?? "";
+
+}
+
+
+// ============================================
+// NUMBER CONVERTER
+// ============================================
+
+
+function parseNumber(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return 0;
+
+  }
+
+
+  const cleaned =
+    String(value)
+      .replace(/₹/g, "")
+      .replace(/,/g, "")
+      .replace(/[^0-9.-]/g, "");
+
+
+  const number =
+    parseFloat(cleaned);
+
+
+  return isNaN(number)
+    ? 0
+    : number;
+
+}
+
+
+// ============================================
+// FORMAT NUMBER
+// ============================================
+
+
+function formatNumber(number) {
+
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      maximumFractionDigits: 2
+    }
+  ).format(number || 0);
+
+}
+
+
+// ============================================
+// FORMAT APE
+// ============================================
+
+
+function formatAPE(number) {
+
+  if (!number) {
+    return "0";
+  }
+
+
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      maximumFractionDigits: 2
+    }
+  ).format(number);
+
+}
+
+
+// ============================================
+// PAGE LOAD
+// ============================================
+
 
 document.addEventListener(
   "DOMContentLoaded",
   function () {
 
     console.log(
-      "Starting FOS Performance Portal..."
+      "Starting FOS Performance Portal"
     );
 
 
-    setupEventListeners();
+    setupNavigation();
 
+    setupFilters();
 
     loadLiveData();
 
@@ -42,27 +187,36 @@ document.addEventListener(
 );
 
 
-// =========================================================
+// ============================================
 // LOAD LIVE DATA
-// =========================================================
+// ============================================
+
 
 async function loadLiveData() {
 
-  showLoading();
+
+  showLoadingScreen();
 
 
   try {
 
+
     console.log(
-      "Loading live data from Google Sheet..."
+      "Loading data from Google Sheet..."
+    );
+
+
+    updateConnectionStatus(
+      "Loading data..."
     );
 
 
     const response =
       await fetch(
-        API_URL +
-        "?t=" +
-        new Date().getTime()
+        API_URL,
+        {
+          cache: "no-store"
+        }
       );
 
 
@@ -81,12 +235,9 @@ async function loadLiveData() {
 
 
     console.log(
-      "Google Sheet response:",
-      result
+      "Data received from Google Sheet"
     );
 
-
-    // CHECK API RESPONSE
 
     if (!result.success) {
 
@@ -98,8 +249,6 @@ async function loadLiveData() {
     }
 
 
-    // GET HEADERS AND ROWS
-
     headers =
       result.headers || [];
 
@@ -108,11 +257,15 @@ async function loadLiveData() {
       result.rows || [];
 
 
-    // CONVERT INTO OBJECTS
+    // ========================================
+    // CONVERT ROWS INTO OBJECTS
+    // ========================================
+
 
     allData =
       rawRows.map(
         function (row) {
+
 
           const obj = {};
 
@@ -123,20 +276,23 @@ async function loadLiveData() {
               index
             ) {
 
-              const uniqueKey =
+
+              const columnName =
                 header +
                 "__" +
                 index;
 
 
-              obj[uniqueKey] =
+              obj[columnName] =
                 row[index] ?? "";
+
 
             }
           );
 
 
           return obj;
+
 
         }
       );
@@ -152,26 +308,49 @@ async function loadLiveData() {
     );
 
 
+    console.log(
+      "Headers:",
+      headers
+    );
+
+
+    // ========================================
     // UPDATE EVERYTHING
+    // ========================================
+
 
     populateTrainerFilter();
 
+    updateDashboard(
+      filteredData
+    );
 
-    applyFilters();
+
+    renderTableHeaders();
+
+    renderTable(
+      filteredData
+    );
 
 
     updateLastUpdated();
 
 
     updateConnectionStatus(
-      "Live"
+      "Live • Connected"
     );
 
 
-    hideLoading();
+    hideLoadingScreen();
+
+
+    console.log(
+      "Live data loaded successfully."
+    );
 
 
   } catch (error) {
+
 
     console.error(
       "Data loading error:",
@@ -180,11 +359,11 @@ async function loadLiveData() {
 
 
     updateConnectionStatus(
-      "Connection Error"
+      "Connection failed"
     );
 
 
-    hideLoading();
+    hideLoadingScreen();
 
 
     alert(
@@ -197,89 +376,534 @@ async function loadLiveData() {
 
     );
 
+
   }
+
 
 }
 
 
-// =========================================================
-// FIND COLUMN
-// =========================================================
-
-function findColumnIndex(names) {
-
-  return headers.findIndex(
-    function (header) {
-
-      const cleanHeader =
-        String(header)
-          .trim()
-          .toLowerCase();
+// ============================================
+// LOADING SCREEN
+// ============================================
 
 
-      return names.some(
-        function (name) {
+function showLoadingScreen() {
 
-          return (
-            cleanHeader ===
-            name.toLowerCase()
-          );
 
-        }
-      );
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
+
+
+  if (loader) {
+
+    loader.style.display =
+      "flex";
+
+  }
+
+
+}
+
+
+function hideLoadingScreen() {
+
+
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
+
+
+  if (loader) {
+
+    loader.style.display =
+      "none";
+
+  }
+
+
+}
+
+
+// ============================================
+// CONNECTION STATUS
+// ============================================
+
+
+function updateConnectionStatus(message) {
+
+
+  const status =
+    document.getElementById(
+      "sidebarStatus"
+    );
+
+
+  if (status) {
+
+    status.textContent =
+      message;
+
+  }
+
+
+}
+
+
+// ============================================
+// UPDATE LAST UPDATED TIME
+// ============================================
+
+
+function updateLastUpdated() {
+
+
+  const element =
+    document.getElementById(
+      "lastUpdated"
+    );
+
+
+  if (!element) {
+    return;
+  }
+
+
+  const now =
+    new Date();
+
+
+  element.textContent =
+    now.toLocaleString(
+      "en-IN",
+      {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }
+    );
+
+
+}
+
+
+// ============================================
+// POPULATE TRAINER FILTER
+// ============================================
+
+
+function populateTrainerFilter() {
+
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  if (!trainerFilter) {
+    return;
+  }
+
+
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
+
+
+  if (trainerIndex === -1) {
+
+    console.warn(
+      "Trainer column not found"
+    );
+
+    return;
+
+  }
+
+
+  const currentValue =
+    trainerFilter.value;
+
+
+  const trainers =
+    new Set();
+
+
+  allData.forEach(
+    function (row) {
+
+
+      const trainer =
+        String(
+          getValue(
+            row,
+            trainerIndex
+          )
+        ).trim();
+
+
+      if (trainer !== "") {
+
+        trainers.add(
+          trainer
+        );
+
+      }
+
 
     }
   );
 
-}
+
+  trainerFilter.innerHTML =
+    '<option value="">All Trainers</option>';
 
 
-// =========================================================
-// GET CELL VALUE
-// =========================================================
+  Array.from(trainers)
+    .sort()
+    .forEach(
+      function (trainer) {
 
-function getValue(
-  dataObject,
-  columnNames
-) {
 
-  const index =
-    findColumnIndex(
-      columnNames
+        const option =
+          document.createElement(
+            "option"
+          );
+
+
+        option.value =
+          trainer;
+
+
+        option.textContent =
+          trainer;
+
+
+        trainerFilter.appendChild(
+          option
+        );
+
+
+      }
     );
 
 
-  if (index === -1) {
+  trainerFilter.value =
+    currentValue;
 
-    return "";
+
+}
+
+
+// ============================================
+// UPDATE DASHBOARD
+// ============================================
+
+
+function updateDashboard(data) {
+
+
+  // ----------------------------------------
+  // FIND IMPORTANT COLUMNS
+  // ----------------------------------------
+
+
+  const isActiveIndex =
+    findColumnIndex([
+      "isactive",
+      "active",
+      "status",
+      "memberstatus"
+    ]);
+
+
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
+
+
+  const appointmentIndex =
+    findColumnIndex([
+      "appointments",
+      "appointment",
+      "totalappointments"
+    ]);
+
+
+  const visitIndex =
+    findColumnIndex([
+      "visits",
+      "visit",
+      "totalvisits"
+    ]);
+
+
+  const bookingIndex =
+    findColumnIndex([
+      "bookings",
+      "booking",
+      "totalbookings"
+    ]);
+
+
+  const apeIndex =
+    findColumnIndex([
+      "ape",
+      "annualpremiumequivalent"
+    ]);
+
+
+  // ----------------------------------------
+  // TOTAL MEMBERS
+  // ----------------------------------------
+
+
+  setElementValue(
+    "totalMembers",
+    formatNumber(
+      data.length
+    )
+  );
+
+
+  // ----------------------------------------
+  // ACTIVE MEMBERS
+  // ----------------------------------------
+
+
+  let activeCount =
+    0;
+
+
+  if (
+    isActiveIndex !== -1
+  ) {
+
+
+    activeCount =
+      data.filter(
+        function (row) {
+
+
+          const value =
+            String(
+              getValue(
+                row,
+                isActiveIndex
+              )
+            )
+              .trim()
+              .toLowerCase();
+
+
+          return (
+
+            value === "yes" ||
+            value === "true" ||
+            value === "1" ||
+            value === "active"
+
+          );
+
+
+        }
+      ).length;
+
 
   }
 
 
-  const key =
-    headers[index] +
-    "__" +
-    index;
-
-
-  return (
-    dataObject[key] ??
-    ""
+  setElementValue(
+    "activeMembers",
+    formatNumber(
+      activeCount
+    )
   );
+
+
+  // ----------------------------------------
+  // TRAINERS
+  // ----------------------------------------
+
+
+  const trainers =
+    new Set();
+
+
+  if (
+    trainerIndex !== -1
+  ) {
+
+
+    data.forEach(
+      function (row) {
+
+
+        const trainer =
+          String(
+            getValue(
+              row,
+              trainerIndex
+            )
+          ).trim();
+
+
+        if (trainer) {
+
+          trainers.add(
+            trainer
+          );
+
+        }
+
+
+      }
+    );
+
+
+  }
+
+
+  setElementValue(
+    "trainerCount",
+    formatNumber(
+      trainers.size
+    )
+  );
+
+
+  // ----------------------------------------
+  // APPOINTMENTS
+  // ----------------------------------------
+
+
+  const appointments =
+    sumColumn(
+      data,
+      appointmentIndex
+    );
+
+
+  setElementValue(
+    "appointmentValue",
+    formatNumber(
+      appointments
+    )
+  );
+
+
+  setElementValue(
+    "group1Value",
+    formatNumber(
+      appointments
+    )
+  );
+
+
+  // ----------------------------------------
+  // VISITS
+  // ----------------------------------------
+
+
+  const visits =
+    sumColumn(
+      data,
+      visitIndex
+    );
+
+
+  setElementValue(
+    "group2Value",
+    formatNumber(
+      visits
+    )
+  );
+
+
+  // ----------------------------------------
+  // BOOKINGS
+  // ----------------------------------------
+
+
+  const bookings =
+    sumColumn(
+      data,
+      bookingIndex
+    );
+
+
+  setElementValue(
+    "group3Value",
+    formatNumber(
+      bookings
+    )
+  );
+
+
+  // ----------------------------------------
+  // APE
+  // ----------------------------------------
+
+
+  const ape =
+    sumColumn(
+      data,
+      apeIndex
+    );
+
+
+  setElementValue(
+    "apeValue",
+    formatAPE(
+      ape
+    )
+  );
+
+
+  setElementValue(
+    "group4Value",
+    formatAPE(
+      ape
+    )
+  );
+
+
+  // ----------------------------------------
+  // TRAINER LIST
+  // ----------------------------------------
+
+
+  renderTrainerList(
+    data,
+    trainerIndex
+  );
+
 
 }
 
 
-// =========================================================
-// NUMBER CONVERTER
-// =========================================================
+// ============================================
+// SUM COLUMN
+// ============================================
 
-function toNumber(value) {
+
+function sumColumn(
+  data,
+  columnIndex
+) {
+
 
   if (
-    value === null ||
-    value === undefined ||
-    value === ""
+    columnIndex === -1
   ) {
 
     return 0;
@@ -287,45 +911,633 @@ function toNumber(value) {
   }
 
 
-  const cleaned =
-    String(value)
-      .replace(/,/g, "")
-      .replace(/[^\d.-]/g, "");
+  return data.reduce(
+    function (
+      total,
+      row
+    ) {
 
 
-  const number =
-    Number(cleaned);
+      return (
+        total +
+
+        parseNumber(
+          getValue(
+            row,
+            columnIndex
+          )
+        )
+
+      );
 
 
-  return isNaN(number)
-    ? 0
-    : number;
+    },
+    0
+  );
+
 
 }
 
 
-// =========================================================
-// FORMAT NUMBER
-// =========================================================
+// ============================================
+// SET ELEMENT VALUE
+// ============================================
 
-function formatNumber(number) {
 
-  return Number(number)
-    .toLocaleString(
-      "en-IN",
-      {
-        maximumFractionDigits: 2
-      }
+function setElementValue(
+  id,
+  value
+) {
+
+
+  const element =
+    document.getElementById(
+      id
     );
 
+
+  if (element) {
+
+    element.textContent =
+      value;
+
+  }
+
+
 }
 
 
-// =========================================================
+// ============================================
+// TRAINER LIST
+// ============================================
+
+
+function renderTrainerList(
+  data,
+  trainerIndex
+) {
+
+
+  const container =
+    document.getElementById(
+      "trainerList"
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  container.innerHTML =
+    "";
+
+
+  if (
+    trainerIndex === -1
+  ) {
+
+
+    container.innerHTML =
+
+      '<div class="empty-state">' +
+
+      'Trainer column was not found in the Google Sheet.' +
+
+      '</div>';
+
+
+    return;
+
+
+  }
+
+
+  const trainerCounts =
+    {};
+
+
+  data.forEach(
+    function (row) {
+
+
+      const trainer =
+        String(
+          getValue(
+            row,
+            trainerIndex
+          )
+        ).trim();
+
+
+      if (!trainer) {
+        return;
+      }
+
+
+      if (!trainerCounts[trainer]) {
+
+        trainerCounts[trainer] =
+          0;
+
+      }
+
+
+      trainerCounts[trainer]++;
+
+
+    }
+  );
+
+
+  const trainers =
+    Object.keys(
+      trainerCounts
+    ).sort();
+
+
+  if (
+    trainers.length === 0
+  ) {
+
+
+    container.innerHTML =
+
+      '<div class="empty-state">' +
+
+      'No trainers found.' +
+
+      '</div>';
+
+
+    return;
+
+
+  }
+
+
+  trainers.forEach(
+    function (trainer) {
+
+
+      const card =
+        document.createElement(
+          "div"
+        );
+
+
+      card.className =
+        "trainer-card";
+
+
+      const initials =
+        trainer
+          .split(" ")
+          .map(
+            function (word) {
+
+              return word[0];
+
+            }
+          )
+          .join("")
+          .substring(
+            0,
+            2
+          )
+          .toUpperCase();
+
+
+      card.innerHTML =
+
+        '<div class="trainer-avatar">' +
+
+        initials +
+
+        '</div>' +
+
+
+        '<div class="trainer-info">' +
+
+        '<strong>' +
+
+        escapeHTML(
+          trainer
+        ) +
+
+        '</strong>' +
+
+
+        '<span>' +
+
+        formatNumber(
+          trainerCounts[trainer]
+        ) +
+
+        ' records</span>' +
+
+        '</div>';
+
+
+      container.appendChild(
+        card
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// TABLE HEADERS
+// ============================================
+
+
+function renderTableHeaders() {
+
+
+  const tableHead =
+    document.getElementById(
+      "tableHead"
+    );
+
+
+  if (!tableHead) {
+    return;
+  }
+
+
+  tableHead.innerHTML =
+    "";
+
+
+  headers.forEach(
+    function (
+      header,
+      index
+    ) {
+
+
+      const th =
+        document.createElement(
+          "th"
+        );
+
+
+      th.textContent =
+        header ||
+        (
+          "Column " +
+          (
+            index + 1
+          )
+        );
+
+
+      tableHead.appendChild(
+        th
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// RENDER TABLE
+// ============================================
+
+
+function renderTable(data) {
+
+
+  const tableBody =
+    document.getElementById(
+      "tableBody"
+    );
+
+
+  const recordCount =
+    document.getElementById(
+      "recordCount"
+    );
+
+
+  if (
+    recordCount
+  ) {
+
+    recordCount.textContent =
+
+      formatNumber(
+        data.length
+      ) +
+
+      " Records";
+
+
+  }
+
+
+  if (!tableBody) {
+    return;
+  }
+
+
+  tableBody.innerHTML =
+    "";
+
+
+  if (
+    data.length === 0
+  ) {
+
+
+    const tr =
+      document.createElement(
+        "tr"
+      );
+
+
+    tr.className =
+      "empty-row";
+
+
+    const td =
+      document.createElement(
+        "td"
+      );
+
+
+    td.colSpan =
+      Math.max(
+        headers.length,
+        1
+      );
+
+
+    td.textContent =
+      "No records found.";
+
+
+    tr.appendChild(
+      td
+    );
+
+
+    tableBody.appendChild(
+      tr
+    );
+
+
+    return;
+
+
+  }
+
+
+  // Render all rows
+
+  data.forEach(
+    function (row) {
+
+
+      const tr =
+        document.createElement(
+          "tr"
+        );
+
+
+      headers.forEach(
+        function (
+          header,
+          index
+        ) {
+
+
+          const td =
+            document.createElement(
+              "td"
+            );
+
+
+          td.textContent =
+            getValue(
+              row,
+              index
+            );
+
+
+          tr.appendChild(
+            td
+          );
+
+
+        }
+      );
+
+
+      tableBody.appendChild(
+        tr
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// FILTERS
+// ============================================
+
+
+function setupFilters() {
+
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  const statusFilter =
+    document.getElementById(
+      "statusFilter"
+    );
+
+
+  const searchInput =
+    document.getElementById(
+      "searchInput"
+    );
+
+
+  const tableSearchInput =
+    document.getElementById(
+      "tableSearchInput"
+    );
+
+
+  const clearFilters =
+    document.getElementById(
+      "clearFilters"
+    );
+
+
+  if (
+    trainerFilter
+  ) {
+
+    trainerFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    statusFilter
+  ) {
+
+    statusFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    searchInput
+  ) {
+
+    searchInput.addEventListener(
+      "input",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    tableSearchInput
+  ) {
+
+    tableSearchInput.addEventListener(
+
+      "input",
+
+      function () {
+
+
+        const searchText =
+          tableSearchInput.value
+            .trim()
+            .toLowerCase();
+
+
+        const searchedData =
+          filteredData.filter(
+            function (row) {
+
+
+              return rowMatchesSearch(
+                row,
+                searchText
+              );
+
+
+            }
+          );
+
+
+        renderTable(
+          searchedData
+        );
+
+
+      }
+
+    );
+
+  }
+
+
+  if (
+    clearFilters
+  ) {
+
+
+    clearFilters.addEventListener(
+
+      "click",
+
+      function () {
+
+
+        if (trainerFilter) {
+
+          trainerFilter.value =
+            "";
+
+        }
+
+
+        if (statusFilter) {
+
+          statusFilter.value =
+            "";
+
+        }
+
+
+        if (searchInput) {
+
+          searchInput.value =
+            "";
+
+        }
+
+
+        if (tableSearchInput) {
+
+          tableSearchInput.value =
+            "";
+
+        }
+
+
+        applyFilters();
+
+
+      }
+
+    );
+
+
+  }
+
+
+}
+
+
+// ============================================
 // APPLY FILTERS
-// =========================================================
+// ============================================
+
 
 function applyFilters() {
+
 
   const trainerFilter =
     document.getElementById(
@@ -365,6 +1577,23 @@ function applyFilters() {
       : "";
 
 
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
+
+
+  const statusIndex =
+    findColumnIndex([
+      "isactive",
+      "active",
+      "status",
+      "memberstatus"
+    ]);
+
+
   filteredData =
     allData.filter(
       function (row) {
@@ -372,13 +1601,17 @@ function applyFilters() {
 
         // TRAINER FILTER
 
-        if (trainerValue) {
+        if (
+          trainerValue &&
+          trainerIndex !== -1
+        ) {
+
 
           const trainer =
             String(
               getValue(
                 row,
-                ["Trainer"]
+                trainerIndex
               )
             ).trim();
 
@@ -392,21 +1625,23 @@ function applyFilters() {
 
           }
 
+
         }
 
 
         // STATUS FILTER
 
-        if (statusValue) {
+        if (
+          statusValue &&
+          statusIndex !== -1
+        ) {
 
-          const activeValue =
+
+          const status =
             String(
               getValue(
                 row,
-                [
-                  "IsActive",
-                  "Is Active"
-                ]
+                statusIndex
               )
             )
               .trim()
@@ -414,15 +1649,15 @@ function applyFilters() {
 
 
           const isActive =
-            activeValue === "yes" ||
-            activeValue === "true" ||
-            activeValue === "1" ||
-            activeValue === "active";
+
+            status === "yes" ||
+            status === "true" ||
+            status === "1" ||
+            status === "active";
 
 
           if (
-            statusValue ===
-            "active" &&
+            statusValue === "active" &&
             !isActive
           ) {
 
@@ -432,8 +1667,7 @@ function applyFilters() {
 
 
           if (
-            statusValue ===
-            "inactive" &&
+            statusValue === "inactive" &&
             isActive
           ) {
 
@@ -441,836 +1675,103 @@ function applyFilters() {
 
           }
 
+
         }
 
 
-        // SEARCH ALL COLUMNS
+        // SEARCH
 
-        if (searchValue) {
+        if (
+          searchValue &&
+          !rowMatchesSearch(
+            row,
+            searchValue
+          )
+        ) {
 
-          const rowText =
-            Object.values(row)
-              .join(" ")
-              .toLowerCase();
-
-
-          if (
-            !rowText.includes(
-              searchValue
-            )
-          ) {
-
-            return false;
-
-          }
+          return false;
 
         }
 
 
         return true;
 
+
       }
     );
 
 
-  updateDashboard();
+  updateDashboard(
+    filteredData
+  );
 
 
-  renderTable();
+  renderTable(
+    filteredData
+  );
 
-
-  updateRecordCount();
 
 }
 
 
-// =========================================================
-// UPDATE DASHBOARD
-// =========================================================
+// ============================================
+// ROW SEARCH
+// ============================================
 
-function updateDashboard() {
 
-
-  // TOTAL MEMBERS
-
-  setText(
-    "totalMembers",
-    filteredData.length
-  );
-
-
-  // ACTIVE MEMBERS
-
-  const activeCount =
-    filteredData.filter(
-      function (row) {
-
-        const value =
-          String(
-            getValue(
-              row,
-              [
-                "IsActive",
-                "Is Active"
-              ]
-            )
-          )
-            .trim()
-            .toLowerCase();
-
-
-        return (
-
-          value === "yes" ||
-
-          value === "true" ||
-
-          value === "1" ||
-
-          value === "active"
-
-        );
-
-      }
-    ).length;
-
-
-  setText(
-    "activeMembers",
-    activeCount
-  );
-
-
-  // TRAINERS
-
-  const trainers =
-    new Set();
-
-
-  filteredData.forEach(
-    function (row) {
-
-      const trainer =
-        String(
-          getValue(
-            row,
-            ["Trainer"]
-          )
-        ).trim();
-
-
-      if (trainer) {
-
-        trainers.add(
-          trainer
-        );
-
-      }
-
-    }
-  );
-
-
-  setText(
-    "trainerCount",
-    trainers.size
-  );
-
-
-  // APPOINTMENTS
-
-  const appointmentTotal =
-    sumColumns(
-      filteredData,
-      [
-        "Appoint",
-        "Appointment",
-        "Appointments"
-      ]
-    );
-
-
-  setText(
-    "appointmentValue",
-    formatNumber(
-      appointmentTotal
-    )
-  );
-
-
-  // VISITS
-
-  const visitTotal =
-    sumColumns(
-      filteredData,
-      [
-        "Visits",
-        "Visit"
-      ]
-    );
-
-
-  // BOOKINGS
-
-  const bookingTotal =
-    sumColumns(
-      filteredData,
-      [
-        "Bookings",
-        "Booking"
-      ]
-    );
-
-
-  // APE
-
-  const apeTotal =
-    sumColumns(
-      filteredData,
-      [
-        "APE"
-      ]
-    );
-
-
-  // GROUP 1
-
-  setText(
-    "group1Value",
-    formatNumber(
-      appointmentTotal
-    )
-  );
-
-
-  // GROUP 2
-
-  setText(
-    "group2Value",
-    formatNumber(
-      visitTotal
-    )
-  );
-
-
-  // GROUP 3
-
-  setText(
-    "group3Value",
-    formatNumber(
-      bookingTotal
-    )
-  );
-
-
-  // GROUP 4
-
-  setText(
-    "group4Value",
-    formatNumber(
-      apeTotal
-    )
-  );
-
-
-  // MAIN APE
-
-  setText(
-    "apeValue",
-    formatNumber(
-      apeTotal
-    )
-  );
-
-
-  // TRAINER LIST
-
-  renderTrainerList(
-    trainers
-  );
-
-}
-
-
-// =========================================================
-// SUM COLUMNS
-// =========================================================
-
-function sumColumns(
-  data,
-  possibleNames
+function rowMatchesSearch(
+  row,
+  searchText
 ) {
 
-  return data.reduce(
+
+  if (!searchText) {
+    return true;
+  }
+
+
+  return headers.some(
     function (
-      total,
-      row
+      header,
+      index
     ) {
 
-      return (
 
-        total +
-
-        toNumber(
-
-          getValue(
-            row,
-            possibleNames
-          )
-
-        )
-
-      );
-
-    },
-    0
-  );
-
-}
-
-
-// =========================================================
-// SET TEXT
-// =========================================================
-
-function setText(
-  id,
-  value
-) {
-
-  const element =
-    document.getElementById(
-      id
-    );
-
-
-  if (element) {
-
-    element.textContent =
-      value;
-
-  }
-
-}
-
-
-// =========================================================
-// POPULATE TRAINER FILTER
-// =========================================================
-
-function populateTrainerFilter() {
-
-  const trainerFilter =
-    document.getElementById(
-      "trainerFilter"
-    );
-
-
-  if (!trainerFilter) {
-
-    return;
-
-  }
-
-
-  const currentValue =
-    trainerFilter.value;
-
-
-  const trainers =
-    new Set();
-
-
-  allData.forEach(
-    function (row) {
-
-      const trainer =
+      const value =
         String(
           getValue(
             row,
-            ["Trainer"]
+            index
           )
-        ).trim();
+        )
+          .toLowerCase();
 
 
-      if (trainer) {
-
-        trainers.add(
-          trainer
-        );
-
-      }
-
-    }
-  );
-
-
-  const sortedTrainers =
-    Array.from(
-      trainers
-    ).sort();
-
-
-  trainerFilter.innerHTML =
-    '<option value="">All Trainers</option>';
-
-
-  sortedTrainers.forEach(
-    function (trainer) {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-
-      option.value =
-        trainer;
-
-
-      option.textContent =
-        trainer;
-
-
-      trainerFilter.appendChild(
-        option
+      return value.includes(
+        searchText
       );
 
+
     }
   );
 
-
-  if (
-    sortedTrainers.includes(
-      currentValue
-    )
-  ) {
-
-    trainerFilter.value =
-      currentValue;
-
-  }
 
 }
 
 
-// =========================================================
-// RENDER TRAINER LIST
-// =========================================================
+// ============================================
+// NAVIGATION
+// ============================================
 
-function renderTrainerList(
-  trainers
-) {
 
-  const trainerList =
+function setupNavigation() {
+
+
+  const dashboardNav =
     document.getElementById(
-      "trainerList"
+      "dashboardNav"
     );
 
-
-  if (!trainerList) {
-
-    return;
-
-  }
-
-
-  trainerList.innerHTML =
-    "";
-
-
-  const trainerArray =
-    Array.from(
-      trainers
-    ).sort();
-
-
-  if (
-    trainerArray.length === 0
-  ) {
-
-    trainerList.innerHTML =
-      "<p>No trainers found.</p>";
-
-    return;
-
-  }
-
-
-  trainerArray.forEach(
-    function (trainer) {
-
-      const chip =
-        document.createElement(
-          "div"
-        );
-
-
-      chip.className =
-        "trainer-chip";
-
-
-      chip.textContent =
-        trainer;
-
-
-      trainerList.appendChild(
-        chip
-      );
-
-    }
-  );
-
-}
-
-
-// =========================================================
-// RENDER TABLE
-// =========================================================
-
-function renderTable() {
-
-
-  const tableHead =
-    document.getElementById(
-      "tableHead"
-    );
-
-
-  const tableBody =
-    document.getElementById(
-      "tableBody"
-    );
-
-
-  if (
-    !tableHead ||
-    !tableBody
-  ) {
-
-    return;
-
-  }
-
-
-  // CLEAR
-
-  tableHead.innerHTML =
-    "";
-
-
-  tableBody.innerHTML =
-    "";
-
-
-  // HEADERS
-
-  headers.forEach(
-    function (header) {
-
-      const th =
-        document.createElement(
-          "th"
-        );
-
-
-      th.textContent =
-        header;
-
-
-      tableHead.appendChild(
-        th
-      );
-
-    }
-  );
-
-
-  // ROWS
-
-  if (
-    filteredData.length === 0
-  ) {
-
-    const tr =
-      document.createElement(
-        "tr"
-      );
-
-
-    const td =
-      document.createElement(
-        "td"
-      );
-
-
-    td.colSpan =
-      headers.length;
-
-
-    td.textContent =
-      "No records found.";
-
-
-    td.style.textAlign =
-      "center";
-
-
-    tr.appendChild(
-      td
-    );
-
-
-    tableBody.appendChild(
-      tr
-    );
-
-
-    return;
-
-  }
-
-
-  filteredData.forEach(
-    function (row) {
-
-      const tr =
-        document.createElement(
-          "tr"
-        );
-
-
-      headers.forEach(
-        function (
-          header,
-          index
-        ) {
-
-          const td =
-            document.createElement(
-              "td"
-            );
-
-
-          const key =
-            header +
-            "__" +
-            index;
-
-
-          td.textContent =
-            row[key] ?? "";
-
-
-          tr.appendChild(
-            td
-          );
-
-        }
-      );
-
-
-      tableBody.appendChild(
-        tr
-      );
-
-    }
-  );
-
-}
-
-
-// =========================================================
-// RECORD COUNT
-// =========================================================
-
-function updateRecordCount() {
-
-  setText(
-
-    "recordCount",
-
-    filteredData.length +
-    " Records"
-
-  );
-
-}
-
-
-// =========================================================
-// EVENT LISTENERS
-// =========================================================
-
-function setupEventListeners() {
-
-
-  // TRAINER FILTER
-
-  const trainerFilter =
-    document.getElementById(
-      "trainerFilter"
-    );
-
-
-  if (trainerFilter) {
-
-    trainerFilter.addEventListener(
-      "change",
-      applyFilters
-    );
-
-  }
-
-
-  // STATUS FILTER
-
-  const statusFilter =
-    document.getElementById(
-      "statusFilter"
-    );
-
-
-  if (statusFilter) {
-
-    statusFilter.addEventListener(
-      "change",
-      applyFilters
-    );
-
-  }
-
-
-  // MAIN SEARCH
-
-  const searchInput =
-    document.getElementById(
-      "searchInput"
-    );
-
-
-  if (searchInput) {
-
-    searchInput.addEventListener(
-      "input",
-      applyFilters
-    );
-
-  }
-
-
-  // TABLE SEARCH
-
-  const tableSearchInput =
-    document.getElementById(
-      "tableSearchInput"
-    );
-
-
-  if (tableSearchInput) {
-
-    tableSearchInput.addEventListener(
-      "input",
-      function () {
-
-
-        const searchValue =
-          this.value
-            .toLowerCase()
-            .trim();
-
-
-        if (
-          !searchValue
-        ) {
-
-          applyFilters();
-
-          return;
-
-        }
-
-
-        filteredData =
-          allData.filter(
-            function (row) {
-
-              return Object
-                .values(row)
-                .join(" ")
-                .toLowerCase()
-                .includes(
-                  searchValue
-                );
-
-            }
-          );
-
-
-        renderTable();
-
-
-        updateRecordCount();
-
-      }
-    );
-
-  }
-
-
-  // CLEAR FILTERS
-
-  const clearFilters =
-    document.getElementById(
-      "clearFilters"
-    );
-
-
-  if (clearFilters) {
-
-    clearFilters.addEventListener(
-      "click",
-      function () {
-
-
-        document.getElementById(
-          "trainerFilter"
-        ).value = "";
-
-
-        document.getElementById(
-          "statusFilter"
-        ).value = "";
-
-
-        document.getElementById(
-          "searchInput"
-        ).value = "";
-
-
-        const tableSearch =
-          document.getElementById(
-            "tableSearchInput"
-          );
-
-
-        if (tableSearch) {
-
-          tableSearch.value =
-            "";
-
-        }
-
-
-        applyFilters();
-
-      }
-    );
-
-  }
-
-
-  // PERFORMANCE NAVIGATION
 
   const performanceNav =
     document.getElementById(
@@ -1278,152 +1779,235 @@ function setupEventListeners() {
     );
 
 
-  if (performanceNav) {
+  if (
+    dashboardNav
+  ) {
 
-    performanceNav.addEventListener(
+
+    dashboardNav.addEventListener(
+
       "click",
+
       function () {
 
 
-        document
-          .getElementById(
-            "dashboardPage"
-          )
-          .classList.remove(
-            "active-page"
-          );
+        showPage(
+          "dashboard"
+        );
 
-
-        document
-          .getElementById(
-            "performancePage"
-          )
-          .classList.add(
-            "active-page"
-          );
-
-
-        renderTable();
 
       }
+
     );
 
+
   }
+
+
+  if (
+    performanceNav
+  ) {
+
+
+    performanceNav.addEventListener(
+
+      "click",
+
+      function () {
+
+
+        showPage(
+          "performance"
+        );
+
+
+      }
+
+    );
+
+
+  }
+
 
 }
 
 
-// =========================================================
-// REFRESH DATA
-// =========================================================
+// ============================================
+// SHOW PAGE
+// ============================================
+
+
+function showPage(
+  page
+) {
+
+
+  const dashboardPage =
+    document.getElementById(
+      "dashboardPage"
+    );
+
+
+  const performancePage =
+    document.getElementById(
+      "performancePage"
+    );
+
+
+  const dashboardNav =
+    document.getElementById(
+      "dashboardNav"
+    );
+
+
+  const performanceNav =
+    document.getElementById(
+      "performanceNav"
+    );
+
+
+  const pageTitle =
+    document.getElementById(
+      "pageTitle"
+    );
+
+
+  if (
+    page === "dashboard"
+  ) {
+
+
+    dashboardPage.classList.add(
+      "active-page"
+    );
+
+
+    performancePage.classList.remove(
+      "active-page"
+    );
+
+
+    dashboardNav.classList.add(
+      "active"
+    );
+
+
+    performanceNav.classList.remove(
+      "active"
+    );
+
+
+    if (pageTitle) {
+
+      pageTitle.textContent =
+        "Dashboard";
+
+    }
+
+
+  }
+
+
+  if (
+    page === "performance"
+  ) {
+
+
+    performancePage.classList.add(
+      "active-page"
+    );
+
+
+    dashboardPage.classList.remove(
+      "active-page"
+    );
+
+
+    performanceNav.classList.add(
+      "active"
+    );
+
+
+    dashboardNav.classList.remove(
+      "active"
+    );
+
+
+    if (pageTitle) {
+
+      pageTitle.textContent =
+        "Performance Data";
+
+    }
+
+
+  }
+
+
+}
+
+
+// ============================================
+// ESCAPE HTML
+// ============================================
+
+
+function escapeHTML(text) {
+
+
+  const div =
+    document.createElement(
+      "div"
+    );
+
+
+  div.textContent =
+    text;
+
+
+  return div.innerHTML;
+
+
+}
+
+
+// ============================================
+// MANUAL REFRESH
+// ============================================
+
 
 function refreshLiveData() {
 
+
   console.log(
-    "Manual refresh requested..."
+    "Manual refresh started..."
   );
 
 
   loadLiveData();
 
-}
-
-
-// =========================================================
-// LAST UPDATED
-// =========================================================
-
-function updateLastUpdated() {
-
-  const now =
-    new Date();
-
-
-  const time =
-    now.toLocaleString(
-      "en-IN"
-    );
-
-
-  setText(
-    "lastUpdated",
-    time
-  );
 
 }
 
 
-// =========================================================
-// CONNECTION STATUS
-// =========================================================
+// ============================================
+// AUTO REFRESH - EVERY 5 MINUTES
+// ============================================
 
-function updateConnectionStatus(
-  status
-) {
-
-  setText(
-    "sidebarStatus",
-    status
-  );
-
-}
-
-
-// =========================================================
-// LOADING SCREEN
-// =========================================================
-
-function showLoading() {
-
-  const loader =
-    document.getElementById(
-      "loadingScreen"
-    );
-
-
-  if (loader) {
-
-    loader.style.display =
-      "flex";
-
-  }
-
-}
-
-
-function hideLoading() {
-
-  const loader =
-    document.getElementById(
-      "loadingScreen"
-    );
-
-
-  if (loader) {
-
-    loader.style.display =
-      "none";
-
-  }
-
-}
-
-
-// =========================================================
-// AUTO REFRESH
-// EVERY 5 MINUTES
-// =========================================================
 
 setInterval(
   function () {
 
+
     console.log(
-      "Auto refreshing live data..."
+      "Auto-refreshing live data..."
     );
 
 
     loadLiveData();
 
+
   },
+
   300000
 );

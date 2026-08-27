@@ -1,70 +1,149 @@
-// ============================================
-// FOS PERFORMANCE PORTAL - LIVE DATA
-// ============================================
+// =========================================================
+// FOS PERFORMANCE PORTAL
+// LIVE GOOGLE SHEET CONNECTION
+// =========================================================
+
+
+// YOUR GOOGLE APPS SCRIPT API
 
 const API_URL =
   "https://script.google.com/macros/s/AKfycbzU_SubIsUJaJ-ffGnp_yRc8CvEXMRZB4eccAAVa6qTmhp6RwLI8-LK-wVwwzo1gRc/exec";
 
-let allData = [];
+
+// =========================================================
+// GLOBAL DATA
+// =========================================================
+
 let headers = [];
+let rawRows = [];
+let allData = [];
+let filteredData = [];
 
 
-document.addEventListener("DOMContentLoaded", function () {
-  console.log("Starting FOS Performance Portal");
-  loadLiveData();
-});
+// =========================================================
+// START WEBSITE
+// =========================================================
+
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
+
+    console.log(
+      "Starting FOS Performance Portal..."
+    );
 
 
-// ============================================
+    setupEventListeners();
+
+
+    loadLiveData();
+
+  }
+);
+
+
+// =========================================================
 // LOAD LIVE DATA
-// ============================================
+// =========================================================
 
 async function loadLiveData() {
 
+  showLoading();
+
+
   try {
 
-    console.log("Loading data from Google Sheet...");
+    console.log(
+      "Loading live data from Google Sheet..."
+    );
 
-    const response = await fetch(API_URL);
+
+    const response =
+      await fetch(
+        API_URL +
+        "?t=" +
+        new Date().getTime()
+      );
+
 
     if (!response.ok) {
-      throw new Error("Server error: " + response.status);
+
+      throw new Error(
+        "Server error: " +
+        response.status
+      );
+
     }
 
-    const result = await response.json();
 
-    console.log("Data received from Google Sheet");
+    const result =
+      await response.json();
+
+
+    console.log(
+      "Google Sheet response:",
+      result
+    );
+
+
+    // CHECK API RESPONSE
 
     if (!result.success) {
+
       throw new Error(
-        result.error || "Unable to load Google Sheet data"
+        result.error ||
+        "Unable to load Google Sheet data"
       );
+
     }
 
 
-    headers = result.headers || [];
-    const rows = result.rows || [];
+    // GET HEADERS AND ROWS
+
+    headers =
+      result.headers || [];
 
 
-    // Convert rows into objects
-    allData = rows.map(function (row) {
+    rawRows =
+      result.rows || [];
 
-      const obj = {};
 
-      headers.forEach(function (header, index) {
+    // CONVERT INTO OBJECTS
 
-        // Keep duplicate headers separate internally
-        const columnName =
-          header + "__" + index;
+    allData =
+      rawRows.map(
+        function (row) {
 
-        obj[columnName] =
-          row[index] ?? "";
+          const obj = {};
 
-      });
 
-      return obj;
+          headers.forEach(
+            function (
+              header,
+              index
+            ) {
 
-    });
+              const uniqueKey =
+                header +
+                "__" +
+                index;
+
+
+              obj[uniqueKey] =
+                row[index] ?? "";
+
+            }
+          );
+
+
+          return obj;
+
+        }
+      );
+
+
+    filteredData =
+      [...allData];
 
 
     console.log(
@@ -73,9 +152,23 @@ async function loadLiveData() {
     );
 
 
-    hideLoadingScreen();
+    // UPDATE EVERYTHING
 
-    displayData(rows);
+    populateTrainerFilter();
+
+
+    applyFilters();
+
+
+    updateLastUpdated();
+
+
+    updateConnectionStatus(
+      "Live"
+    );
+
+
+    hideLoading();
 
 
   } catch (error) {
@@ -85,12 +178,23 @@ async function loadLiveData() {
       error
     );
 
-    hideLoadingScreen();
+
+    updateConnectionStatus(
+      "Connection Error"
+    );
+
+
+    hideLoading();
+
 
     alert(
+
       "Unable to load live data.\n\n" +
+
       error.message +
+
       "\n\nPlease check your Google Apps Script deployment."
+
     );
 
   }
@@ -98,218 +202,1228 @@ async function loadLiveData() {
 }
 
 
-// ============================================
-// HIDE LOADING SCREEN
-// ============================================
+// =========================================================
+// FIND COLUMN
+// =========================================================
 
-function hideLoadingScreen() {
+function findColumnIndex(names) {
 
-  const loader =
-    document.getElementById("loadingScreen");
+  return headers.findIndex(
+    function (header) {
 
-  if (loader) {
-    loader.style.display = "none";
+      const cleanHeader =
+        String(header)
+          .trim()
+          .toLowerCase();
+
+
+      return names.some(
+        function (name) {
+
+          return (
+            cleanHeader ===
+            name.toLowerCase()
+          );
+
+        }
+      );
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// GET CELL VALUE
+// =========================================================
+
+function getValue(
+  dataObject,
+  columnNames
+) {
+
+  const index =
+    findColumnIndex(
+      columnNames
+    );
+
+
+  if (index === -1) {
+
+    return "";
+
+  }
+
+
+  const key =
+    headers[index] +
+    "__" +
+    index;
+
+
+  return (
+    dataObject[key] ??
+    ""
+  );
+
+}
+
+
+// =========================================================
+// NUMBER CONVERTER
+// =========================================================
+
+function toNumber(value) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return 0;
+
+  }
+
+
+  const cleaned =
+    String(value)
+      .replace(/,/g, "")
+      .replace(/[^\d.-]/g, "");
+
+
+  const number =
+    Number(cleaned);
+
+
+  return isNaN(number)
+    ? 0
+    : number;
+
+}
+
+
+// =========================================================
+// FORMAT NUMBER
+// =========================================================
+
+function formatNumber(number) {
+
+  return Number(number)
+    .toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 2
+      }
+    );
+
+}
+
+
+// =========================================================
+// APPLY FILTERS
+// =========================================================
+
+function applyFilters() {
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  const statusFilter =
+    document.getElementById(
+      "statusFilter"
+    );
+
+
+  const searchInput =
+    document.getElementById(
+      "searchInput"
+    );
+
+
+  const trainerValue =
+    trainerFilter
+      ? trainerFilter.value
+      : "";
+
+
+  const statusValue =
+    statusFilter
+      ? statusFilter.value
+      : "";
+
+
+  const searchValue =
+    searchInput
+      ? searchInput.value
+          .trim()
+          .toLowerCase()
+      : "";
+
+
+  filteredData =
+    allData.filter(
+      function (row) {
+
+
+        // TRAINER FILTER
+
+        if (trainerValue) {
+
+          const trainer =
+            String(
+              getValue(
+                row,
+                ["Trainer"]
+              )
+            ).trim();
+
+
+          if (
+            trainer !==
+            trainerValue
+          ) {
+
+            return false;
+
+          }
+
+        }
+
+
+        // STATUS FILTER
+
+        if (statusValue) {
+
+          const activeValue =
+            String(
+              getValue(
+                row,
+                [
+                  "IsActive",
+                  "Is Active"
+                ]
+              )
+            )
+              .trim()
+              .toLowerCase();
+
+
+          const isActive =
+            activeValue === "yes" ||
+            activeValue === "true" ||
+            activeValue === "1" ||
+            activeValue === "active";
+
+
+          if (
+            statusValue ===
+            "active" &&
+            !isActive
+          ) {
+
+            return false;
+
+          }
+
+
+          if (
+            statusValue ===
+            "inactive" &&
+            isActive
+          ) {
+
+            return false;
+
+          }
+
+        }
+
+
+        // SEARCH ALL COLUMNS
+
+        if (searchValue) {
+
+          const rowText =
+            Object.values(row)
+              .join(" ")
+              .toLowerCase();
+
+
+          if (
+            !rowText.includes(
+              searchValue
+            )
+          ) {
+
+            return false;
+
+          }
+
+        }
+
+
+        return true;
+
+      }
+    );
+
+
+  updateDashboard();
+
+
+  renderTable();
+
+
+  updateRecordCount();
+
+}
+
+
+// =========================================================
+// UPDATE DASHBOARD
+// =========================================================
+
+function updateDashboard() {
+
+
+  // TOTAL MEMBERS
+
+  setText(
+    "totalMembers",
+    filteredData.length
+  );
+
+
+  // ACTIVE MEMBERS
+
+  const activeCount =
+    filteredData.filter(
+      function (row) {
+
+        const value =
+          String(
+            getValue(
+              row,
+              [
+                "IsActive",
+                "Is Active"
+              ]
+            )
+          )
+            .trim()
+            .toLowerCase();
+
+
+        return (
+
+          value === "yes" ||
+
+          value === "true" ||
+
+          value === "1" ||
+
+          value === "active"
+
+        );
+
+      }
+    ).length;
+
+
+  setText(
+    "activeMembers",
+    activeCount
+  );
+
+
+  // TRAINERS
+
+  const trainers =
+    new Set();
+
+
+  filteredData.forEach(
+    function (row) {
+
+      const trainer =
+        String(
+          getValue(
+            row,
+            ["Trainer"]
+          )
+        ).trim();
+
+
+      if (trainer) {
+
+        trainers.add(
+          trainer
+        );
+
+      }
+
+    }
+  );
+
+
+  setText(
+    "trainerCount",
+    trainers.size
+  );
+
+
+  // APPOINTMENTS
+
+  const appointmentTotal =
+    sumColumns(
+      filteredData,
+      [
+        "Appoint",
+        "Appointment",
+        "Appointments"
+      ]
+    );
+
+
+  setText(
+    "appointmentValue",
+    formatNumber(
+      appointmentTotal
+    )
+  );
+
+
+  // VISITS
+
+  const visitTotal =
+    sumColumns(
+      filteredData,
+      [
+        "Visits",
+        "Visit"
+      ]
+    );
+
+
+  // BOOKINGS
+
+  const bookingTotal =
+    sumColumns(
+      filteredData,
+      [
+        "Bookings",
+        "Booking"
+      ]
+    );
+
+
+  // APE
+
+  const apeTotal =
+    sumColumns(
+      filteredData,
+      [
+        "APE"
+      ]
+    );
+
+
+  // GROUP 1
+
+  setText(
+    "group1Value",
+    formatNumber(
+      appointmentTotal
+    )
+  );
+
+
+  // GROUP 2
+
+  setText(
+    "group2Value",
+    formatNumber(
+      visitTotal
+    )
+  );
+
+
+  // GROUP 3
+
+  setText(
+    "group3Value",
+    formatNumber(
+      bookingTotal
+    )
+  );
+
+
+  // GROUP 4
+
+  setText(
+    "group4Value",
+    formatNumber(
+      apeTotal
+    )
+  );
+
+
+  // MAIN APE
+
+  setText(
+    "apeValue",
+    formatNumber(
+      apeTotal
+    )
+  );
+
+
+  // TRAINER LIST
+
+  renderTrainerList(
+    trainers
+  );
+
+}
+
+
+// =========================================================
+// SUM COLUMNS
+// =========================================================
+
+function sumColumns(
+  data,
+  possibleNames
+) {
+
+  return data.reduce(
+    function (
+      total,
+      row
+    ) {
+
+      return (
+
+        total +
+
+        toNumber(
+
+          getValue(
+            row,
+            possibleNames
+          )
+
+        )
+
+      );
+
+    },
+    0
+  );
+
+}
+
+
+// =========================================================
+// SET TEXT
+// =========================================================
+
+function setText(
+  id,
+  value
+) {
+
+  const element =
+    document.getElementById(
+      id
+    );
+
+
+  if (element) {
+
+    element.textContent =
+      value;
+
   }
 
 }
 
 
-// ============================================
-// DISPLAY DATA
-// ============================================
+// =========================================================
+// POPULATE TRAINER FILTER
+// =========================================================
 
-function displayData(rows) {
+function populateTrainerFilter() {
 
-  console.log("Displaying live data...");
-
-
-  const tableBody =
-    document.getElementById("tableBody");
-
-
-  // If your existing website doesn't have tableBody,
-  // data is still successfully loaded.
-  if (!tableBody) {
-
-    console.log(
-      "Live data loaded successfully."
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
     );
+
+
+  if (!trainerFilter) {
 
     return;
 
   }
 
 
-  tableBody.innerHTML = "";
+  const currentValue =
+    trainerFilter.value;
 
 
-  rows.forEach(function (row) {
-
-    const tr =
-      document.createElement("tr");
+  const trainers =
+    new Set();
 
 
-    row.forEach(function (cell) {
-
-      const td =
-        document.createElement("td");
-
-      td.textContent =
-        cell ?? "";
-
-      tr.appendChild(td);
-
-    });
-
-
-    tableBody.appendChild(tr);
-
-  });
-
-
-  updateDashboard();
-
-}
-
-
-// ============================================
-// UPDATE DASHBOARD
-// ============================================
-
-function updateDashboard() {
-
-  // Find exact IsActive column
-  const isActiveIndex =
-    headers.findIndex(function (header) {
-
-      return String(header)
-        .trim()
-        .toLowerCase() === "isactive";
-
-    });
-
-
-  // Total members
-  const totalMembers =
-    document.getElementById("totalMembers");
-
-  if (totalMembers) {
-
-    totalMembers.textContent =
-      allData.length;
-
-  }
-
-
-  // Active members
-  const activeMembers =
-    document.getElementById("activeMembers");
-
-  if (
-    activeMembers &&
-    isActiveIndex !== -1
-  ) {
-
-    const activeCount =
-      allData.filter(function (row) {
-
-        const key =
-          headers[isActiveIndex] +
-          "__" +
-          isActiveIndex;
-
-        const value =
-          String(row[key] || "")
-            .trim()
-            .toLowerCase();
-
-        return (
-          value === "yes" ||
-          value === "true" ||
-          value === "1" ||
-          value === "active"
-        );
-
-      }).length;
-
-
-    activeMembers.textContent =
-      activeCount;
-
-  }
-
-
-  // Find Trainer column
-  const trainerIndex =
-    headers.findIndex(function (header) {
-
-      return String(header)
-        .trim()
-        .toLowerCase() === "trainer";
-
-    });
-
-
-  // Trainer count
-  const trainerCount =
-    document.getElementById("trainerCount");
-
-  if (
-    trainerCount &&
-    trainerIndex !== -1
-  ) {
-
-    const trainers =
-      new Set();
-
-
-    allData.forEach(function (row) {
-
-      const key =
-        headers[trainerIndex] +
-        "__" +
-        trainerIndex;
+  allData.forEach(
+    function (row) {
 
       const trainer =
-        String(row[key] || "").trim();
+        String(
+          getValue(
+            row,
+            ["Trainer"]
+          )
+        ).trim();
 
 
-      if (trainer !== "") {
-        trainers.add(trainer);
+      if (trainer) {
+
+        trainers.add(
+          trainer
+        );
+
       }
 
-    });
+    }
+  );
 
 
-    trainerCount.textContent =
-      trainers.size;
+  const sortedTrainers =
+    Array.from(
+      trainers
+    ).sort();
+
+
+  trainerFilter.innerHTML =
+    '<option value="">All Trainers</option>';
+
+
+  sortedTrainers.forEach(
+    function (trainer) {
+
+      const option =
+        document.createElement(
+          "option"
+        );
+
+
+      option.value =
+        trainer;
+
+
+      option.textContent =
+        trainer;
+
+
+      trainerFilter.appendChild(
+        option
+      );
+
+    }
+  );
+
+
+  if (
+    sortedTrainers.includes(
+      currentValue
+    )
+  ) {
+
+    trainerFilter.value =
+      currentValue;
 
   }
 
 }
 
 
-// ============================================
-// MANUAL REFRESH
-// ============================================
+// =========================================================
+// RENDER TRAINER LIST
+// =========================================================
+
+function renderTrainerList(
+  trainers
+) {
+
+  const trainerList =
+    document.getElementById(
+      "trainerList"
+    );
+
+
+  if (!trainerList) {
+
+    return;
+
+  }
+
+
+  trainerList.innerHTML =
+    "";
+
+
+  const trainerArray =
+    Array.from(
+      trainers
+    ).sort();
+
+
+  if (
+    trainerArray.length === 0
+  ) {
+
+    trainerList.innerHTML =
+      "<p>No trainers found.</p>";
+
+    return;
+
+  }
+
+
+  trainerArray.forEach(
+    function (trainer) {
+
+      const chip =
+        document.createElement(
+          "div"
+        );
+
+
+      chip.className =
+        "trainer-chip";
+
+
+      chip.textContent =
+        trainer;
+
+
+      trainerList.appendChild(
+        chip
+      );
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// RENDER TABLE
+// =========================================================
+
+function renderTable() {
+
+
+  const tableHead =
+    document.getElementById(
+      "tableHead"
+    );
+
+
+  const tableBody =
+    document.getElementById(
+      "tableBody"
+    );
+
+
+  if (
+    !tableHead ||
+    !tableBody
+  ) {
+
+    return;
+
+  }
+
+
+  // CLEAR
+
+  tableHead.innerHTML =
+    "";
+
+
+  tableBody.innerHTML =
+    "";
+
+
+  // HEADERS
+
+  headers.forEach(
+    function (header) {
+
+      const th =
+        document.createElement(
+          "th"
+        );
+
+
+      th.textContent =
+        header;
+
+
+      tableHead.appendChild(
+        th
+      );
+
+    }
+  );
+
+
+  // ROWS
+
+  if (
+    filteredData.length === 0
+  ) {
+
+    const tr =
+      document.createElement(
+        "tr"
+      );
+
+
+    const td =
+      document.createElement(
+        "td"
+      );
+
+
+    td.colSpan =
+      headers.length;
+
+
+    td.textContent =
+      "No records found.";
+
+
+    td.style.textAlign =
+      "center";
+
+
+    tr.appendChild(
+      td
+    );
+
+
+    tableBody.appendChild(
+      tr
+    );
+
+
+    return;
+
+  }
+
+
+  filteredData.forEach(
+    function (row) {
+
+      const tr =
+        document.createElement(
+          "tr"
+        );
+
+
+      headers.forEach(
+        function (
+          header,
+          index
+        ) {
+
+          const td =
+            document.createElement(
+              "td"
+            );
+
+
+          const key =
+            header +
+            "__" +
+            index;
+
+
+          td.textContent =
+            row[key] ?? "";
+
+
+          tr.appendChild(
+            td
+          );
+
+        }
+      );
+
+
+      tableBody.appendChild(
+        tr
+      );
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// RECORD COUNT
+// =========================================================
+
+function updateRecordCount() {
+
+  setText(
+
+    "recordCount",
+
+    filteredData.length +
+    " Records"
+
+  );
+
+}
+
+
+// =========================================================
+// EVENT LISTENERS
+// =========================================================
+
+function setupEventListeners() {
+
+
+  // TRAINER FILTER
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  if (trainerFilter) {
+
+    trainerFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  // STATUS FILTER
+
+  const statusFilter =
+    document.getElementById(
+      "statusFilter"
+    );
+
+
+  if (statusFilter) {
+
+    statusFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  // MAIN SEARCH
+
+  const searchInput =
+    document.getElementById(
+      "searchInput"
+    );
+
+
+  if (searchInput) {
+
+    searchInput.addEventListener(
+      "input",
+      applyFilters
+    );
+
+  }
+
+
+  // TABLE SEARCH
+
+  const tableSearchInput =
+    document.getElementById(
+      "tableSearchInput"
+    );
+
+
+  if (tableSearchInput) {
+
+    tableSearchInput.addEventListener(
+      "input",
+      function () {
+
+
+        const searchValue =
+          this.value
+            .toLowerCase()
+            .trim();
+
+
+        if (
+          !searchValue
+        ) {
+
+          applyFilters();
+
+          return;
+
+        }
+
+
+        filteredData =
+          allData.filter(
+            function (row) {
+
+              return Object
+                .values(row)
+                .join(" ")
+                .toLowerCase()
+                .includes(
+                  searchValue
+                );
+
+            }
+          );
+
+
+        renderTable();
+
+
+        updateRecordCount();
+
+      }
+    );
+
+  }
+
+
+  // CLEAR FILTERS
+
+  const clearFilters =
+    document.getElementById(
+      "clearFilters"
+    );
+
+
+  if (clearFilters) {
+
+    clearFilters.addEventListener(
+      "click",
+      function () {
+
+
+        document.getElementById(
+          "trainerFilter"
+        ).value = "";
+
+
+        document.getElementById(
+          "statusFilter"
+        ).value = "";
+
+
+        document.getElementById(
+          "searchInput"
+        ).value = "";
+
+
+        const tableSearch =
+          document.getElementById(
+            "tableSearchInput"
+          );
+
+
+        if (tableSearch) {
+
+          tableSearch.value =
+            "";
+
+        }
+
+
+        applyFilters();
+
+      }
+    );
+
+  }
+
+
+  // PERFORMANCE NAVIGATION
+
+  const performanceNav =
+    document.getElementById(
+      "performanceNav"
+    );
+
+
+  if (performanceNav) {
+
+    performanceNav.addEventListener(
+      "click",
+      function () {
+
+
+        document
+          .getElementById(
+            "dashboardPage"
+          )
+          .classList.remove(
+            "active-page"
+          );
+
+
+        document
+          .getElementById(
+            "performancePage"
+          )
+          .classList.add(
+            "active-page"
+          );
+
+
+        renderTable();
+
+      }
+    );
+
+  }
+
+}
+
+
+// =========================================================
+// REFRESH DATA
+// =========================================================
 
 function refreshLiveData() {
 
+  console.log(
+    "Manual refresh requested..."
+  );
+
+
   loadLiveData();
 
 }
 
 
-// ============================================
-// AUTO REFRESH EVERY 5 MINUTES
-// ============================================
+// =========================================================
+// LAST UPDATED
+// =========================================================
 
-setInterval(function () {
+function updateLastUpdated() {
 
-  console.log(
-    "Auto-refreshing live data..."
+  const now =
+    new Date();
+
+
+  const time =
+    now.toLocaleString(
+      "en-IN"
+    );
+
+
+  setText(
+    "lastUpdated",
+    time
   );
 
-  loadLiveData();
+}
 
-}, 300000);
+
+// =========================================================
+// CONNECTION STATUS
+// =========================================================
+
+function updateConnectionStatus(
+  status
+) {
+
+  setText(
+    "sidebarStatus",
+    status
+  );
+
+}
+
+
+// =========================================================
+// LOADING SCREEN
+// =========================================================
+
+function showLoading() {
+
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
+
+
+  if (loader) {
+
+    loader.style.display =
+      "flex";
+
+  }
+
+}
+
+
+function hideLoading() {
+
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
+
+
+  if (loader) {
+
+    loader.style.display =
+      "none";
+
+  }
+
+}
+
+
+// =========================================================
+// AUTO REFRESH
+// EVERY 5 MINUTES
+// =========================================================
+
+setInterval(
+  function () {
+
+    console.log(
+      "Auto refreshing live data..."
+    );
+
+
+    loadLiveData();
+
+  },
+  300000
+);

@@ -1,267 +1,299 @@
-// ==========================================
-// FOS PERFORMANCE PORTAL - LIVE DATA
-// ==========================================
+// ============================================
+// FOS PERFORMANCE PORTAL
+// LIVE GOOGLE SHEETS CONNECTION
+// ============================================
 
 const API_URL =
-   "https://script.google.com/macros/s/AKfycbwtZn7_c4J_xMBojwbUp-rP9nmzh9gobMxcGRsTP6awP7y8Ea6N49fnO10VmoyFT8M/exec";
+  "https://script.google.com/macros/s/AKfycbwtZn7_c4J_xMBojwbUp-rP9nmzh9gobMxcGRsTP6awP7y8Ea6N49fnO10VmoyFT8M/exec";
+
 let allData = [];
-let headers = [];
+
+// Start when website opens
+document.addEventListener("DOMContentLoaded", function () {
+  console.log("Starting FOS Performance Portal");
+  loadLiveData();
+});
 
 
-// ==========================================
-// LOAD DATA FROM GOOGLE SHEET
-// ==========================================
+// ============================================
+// LOAD DATA
+// ============================================
 
-async function loadData() {
+async function loadLiveData() {
 
   try {
 
-    showLoading(true);
+    console.log("Loading data from Google Sheet...");
 
     const response = await fetch(API_URL);
 
     if (!response.ok) {
-      throw new Error("Unable to connect to Google Sheet");
+      throw new Error(
+        "Server error: " + response.status
+      );
     }
 
     const result = await response.json();
 
-    // New Apps Script format
-    if (result.success === false) {
-      throw new Error(result.error || "Unable to load data");
+    console.log("Data received:", result);
+
+    if (!result.success) {
+      throw new Error(
+        result.error || "Google Sheet returned an error"
+      );
     }
 
     allData = result.data || [];
 
-    if (allData.length === 0) {
-      throw new Error("No data found in FOS tracker sheet");
-    }
+    console.log(
+      "Total records loaded:",
+      allData.length
+    );
 
-    // Automatically get ALL columns from the sheet
-    headers = Object.keys(allData[0]);
+    // Hide loading screen
+    hideLoadingScreen();
 
-    console.log("Live data loaded:", allData.length);
-    console.log("Columns found:", headers);
-
-    renderPortal();
-
-    showLoading(false);
+    // Show data
+    displayData();
 
   } catch (error) {
 
-    console.error(error);
+    console.error("Data loading error:", error);
 
-    showLoading(false);
+    hideLoadingScreen();
 
-    alert(
-      "Unable to load live data.\n\n" +
-      error.message +
-      "\n\nPlease check your Google Apps Script deployment."
+    showError(
+      "Unable to load live data. " +
+      "Please refresh the page."
     );
+
   }
 
 }
 
 
-// ==========================================
-// RENDER PORTAL
-// ==========================================
+// ============================================
+// HIDE LOADING SCREEN
+// ============================================
 
-function renderPortal() {
+function hideLoadingScreen() {
 
-  // Find table container
-  const tableContainer =
-    document.getElementById("tableContainer") ||
-    document.querySelector(".table-container");
+  const loader =
+    document.getElementById("loadingScreen");
 
-  if (tableContainer) {
-    renderTable(tableContainer);
+  if (loader) {
+
+    loader.style.display = "none";
+
   }
-
-  // Update summary cards if they exist
-  updateSummary();
 
 }
 
 
-// ==========================================
-// CREATE TABLE AUTOMATICALLY
-// ==========================================
+// ============================================
+// DISPLAY DATA
+// ============================================
 
-function renderTable(container) {
+function displayData() {
 
-  container.innerHTML = "";
+  console.log(
+    "Website successfully connected to live data."
+  );
 
-  const table = document.createElement("table");
+  // Find existing table body
+  const tableBody =
+    document.getElementById("tableBody");
 
-  table.className = "data-table";
+  if (!tableBody) {
+
+    console.log(
+      "tableBody not found yet. Data is loaded successfully."
+    );
+
+    return;
+
+  }
+
+  tableBody.innerHTML = "";
+
+  if (allData.length === 0) {
+
+    tableBody.innerHTML =
+      "<tr><td>No data available</td></tr>";
+
+    return;
+
+  }
 
 
-  // ---------- TABLE HEADER ----------
-
-  const thead = document.createElement("thead");
-
-  const headerRow = document.createElement("tr");
-
-  headers.forEach(header => {
-
-    const th = document.createElement("th");
-
-    th.textContent = header;
-
-    headerRow.appendChild(th);
-
-  });
-
-  thead.appendChild(headerRow);
-
-  table.appendChild(thead);
+  // Automatically get ALL columns
+  const columns =
+    Object.keys(allData[0]);
 
 
-  // ---------- TABLE BODY ----------
+  // Add rows
+  allData.forEach(function (row) {
 
-  const tbody = document.createElement("tbody");
+    const tr =
+      document.createElement("tr");
 
-  allData.forEach(row => {
 
-    const tr = document.createElement("tr");
+    columns.forEach(function (column) {
 
-    headers.forEach(header => {
+      const td =
+        document.createElement("td");
 
-      const td = document.createElement("td");
-
-      td.textContent = row[header] ?? "";
+      td.textContent =
+        row[column] || "";
 
       tr.appendChild(td);
 
     });
 
-    tbody.appendChild(tr);
+
+    tableBody.appendChild(tr);
 
   });
 
-  table.appendChild(tbody);
 
-  container.appendChild(table);
+  updateDashboard();
 
 }
 
 
-// ==========================================
-// SUMMARY
-// ==========================================
+// ============================================
+// UPDATE DASHBOARD
+// ============================================
 
-function updateSummary() {
+function updateDashboard() {
 
-  // Total Members
-  const totalElement =
+  // Total members
+  const totalMembers =
     document.getElementById("totalMembers");
 
-  if (totalElement) {
-    totalElement.textContent = allData.length;
+  if (totalMembers) {
+
+    totalMembers.textContent =
+      allData.length;
+
   }
 
 
-  // Active Members
-  const activeElement =
+  // Active members
+  const activeMembers =
     document.getElementById("activeMembers");
 
-  if (activeElement) {
+  if (activeMembers) {
 
-    const activeMembers = allData.filter(row => {
+    const activeCount =
+      allData.filter(function (row) {
 
-      const value =
-        String(row["IsActive"] || "")
-          .toLowerCase()
-          .trim();
+        const status =
+          String(
+            row["IsActive"] || ""
+          )
+            .toLowerCase()
+            .trim();
 
-      return (
-        value === "true" ||
-        value === "yes" ||
-        value === "active" ||
-        value === "1"
-      );
+        return (
+          status === "yes" ||
+          status === "true" ||
+          status === "1" ||
+          status === "active"
+        );
 
-    });
+      }).length;
 
-    activeElement.textContent = activeMembers.length;
+
+    activeMembers.textContent =
+      activeCount;
 
   }
 
 
-  // Trainer count
-  const trainerElement =
+  // Trainers
+  const trainerCount =
     document.getElementById("trainerCount");
 
-  if (trainerElement) {
+  if (trainerCount) {
 
-    const trainers = new Set();
+    const trainers =
+      new Set();
 
-    allData.forEach(row => {
 
-      if (row["Trainer"]) {
-        trainers.add(row["Trainer"]);
+    allData.forEach(function (row) {
+
+      if (
+        row["Trainer"] &&
+        String(row["Trainer"]).trim() !== ""
+      ) {
+
+        trainers.add(
+          row["Trainer"]
+        );
+
       }
 
     });
 
-    trainerElement.textContent = trainers.size;
+
+    trainerCount.textContent =
+      trainers.size;
 
   }
 
 }
 
 
-// ==========================================
-// REFRESH LIVE DATA
-// ==========================================
+// ============================================
+// REFRESH BUTTON
+// ============================================
 
 function refreshLiveData() {
 
-  loadData();
+  console.log("Refreshing live data...");
+
+  loadLiveData();
 
 }
 
 
-// ==========================================
-// LOADING SCREEN
-// ==========================================
+// ============================================
+// SHOW ERROR
+// ============================================
 
-function showLoading(show) {
+function showError(message) {
 
-  const loader =
-    document.getElementById("loadingScreen");
+  const errorBox =
+    document.getElementById("errorMessage");
 
-  if (!loader) return;
+  if (errorBox) {
 
-  if (show) {
-    loader.style.display = "flex";
+    errorBox.textContent =
+      message;
+
+    errorBox.style.display =
+      "block";
+
   } else {
-    loader.style.display = "none";
+
+    console.error(message);
+
   }
 
 }
 
 
-// ==========================================
+// ============================================
 // AUTO REFRESH EVERY 5 MINUTES
-// ==========================================
+// ============================================
 
-setInterval(() => {
+setInterval(function () {
 
-  console.log("Auto refreshing live data...");
+  console.log(
+    "Auto-refreshing live data..."
+  );
 
-  loadData();
+  loadLiveData();
 
 }, 300000);
-
-
-// ==========================================
-// START
-// ==========================================
-
-document.addEventListener("DOMContentLoaded", () => {
-
-  loadData();
-
-});

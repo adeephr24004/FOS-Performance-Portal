@@ -1,830 +1,2013 @@
-<!DOCTYPE html>
-<html lang="en">
+// ============================================
+// FOS PERFORMANCE PORTAL - LIVE DATA
+// ============================================
 
-<head>
 
-  <meta charset="UTF-8">
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbzU_SubIsUJaJ-ffGnp_yRc8CvEXMRZB4eccAAVa6qTmhp6RwLI8-LK-wVwwzo1gRc/exec";
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
 
-  <title>FOS Performance Portal</title>
+let allData = [];
+let headers = [];
+let rawRows = [];
+let filteredData = [];
 
-  <link
-    rel="stylesheet"
-    href="style.css"
-  >
 
-</head>
+// ============================================
+// COLUMN NAME HELPERS
+// ============================================
 
 
-<body>
+function normalizeText(value) {
 
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
 
-  <!-- LOADING SCREEN -->
+}
 
-  <div
-    id="loadingScreen"
-    class="loading-screen"
-  >
 
-    <div class="loader-box">
+// Find a column using multiple possible names
 
-      <div class="loader"></div>
+function findColumnIndex(possibleNames) {
 
-      <h2>Loading FOS Tracker</h2>
+  const normalizedNames =
+    possibleNames.map(function (name) {
 
-      <p>
-        Fetching live data from Google Sheets...
-      </p>
+      return normalizeText(name);
 
-    </div>
+    });
 
-  </div>
 
+  return headers.findIndex(function (header) {
 
+    const normalizedHeader =
+      normalizeText(header);
 
-  <!-- APP -->
 
-  <div class="app-shell">
+    return normalizedNames.some(function (name) {
 
+      return (
+        normalizedHeader === name ||
+        normalizedHeader.includes(name)
+      );
 
-    <!-- SIDEBAR -->
+    });
 
-    <aside class="sidebar">
+  });
 
+}
 
-      <div class="brand">
 
-        <div class="brand-icon">
-          F
-        </div>
+// ============================================
+// GET VALUE FROM ROW
+// ============================================
 
 
-        <div class="brand-text">
+function getValue(row, index) {
 
-          <h1>
-            FOS Portal
-          </h1>
+  if (
+    index === -1 ||
+    index === undefined
+  ) {
 
-          <span>
-            PERFORMANCE TRACKER
-          </span>
+    return "";
 
-        </div>
+  }
 
-      </div>
 
+  const key =
+    headers[index] +
+    "__" +
+    index;
 
 
-      <nav class="sidebar-nav">
+  return row[key] ?? "";
 
-        <button
-          class="nav-item active"
-        >
+}
 
-          <span class="nav-icon">
-            📊
-          </span>
 
-          Dashboard
+// ============================================
+// NUMBER CONVERTER
+// ============================================
 
-        </button>
 
+function parseNumber(value) {
 
-        <button
-          class="nav-item"
-          id="performanceNav"
-        >
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
 
-          <span class="nav-icon">
-            📈
-          </span>
+    return 0;
 
-          Performance Data
+  }
 
-        </button>
 
+  const cleaned =
+    String(value)
+      .replace(/₹/g, "")
+      .replace(/,/g, "")
+      .replace(/[^0-9.-]/g, "");
 
-      </nav>
 
+  const number =
+    parseFloat(cleaned);
 
 
-      <div class="sidebar-bottom">
+  return isNaN(number)
+    ? 0
+    : number;
 
-        <div class="upload-status">
+}
 
-          <span
-            class="status-dot"
-          ></span>
 
+// ============================================
+// FORMAT NUMBER
+// ============================================
 
-          <div>
 
-            <strong>
-              LIVE DATA
-            </strong>
+function formatNumber(number) {
 
-            <small id="sidebarStatus">
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      maximumFractionDigits: 2
+    }
+  ).format(number || 0);
 
-              Connecting...
+}
 
-            </small>
 
-          </div>
+// ============================================
+// FORMAT APE
+// ============================================
 
-        </div>
 
+function formatAPE(number) {
 
-        <button
-          class="upload-button"
-          onclick="refreshLiveData()"
-        >
+  if (!number) {
+    return "0";
+  }
 
-          ↻ Refresh Data
 
-        </button>
+  return new Intl.NumberFormat(
+    "en-IN",
+    {
+      maximumFractionDigits: 2
+    }
+  ).format(number);
 
-      </div>
+}
 
 
-    </aside>
+// ============================================
+// PAGE LOAD
+// ============================================
 
 
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
 
-    <!-- MAIN CONTENT -->
+    console.log(
+      "Starting FOS Performance Portal"
+    );
 
-    <main class="main-content">
 
+    setupNavigation();
 
-      <!-- HEADER -->
+    setupFilters();
 
-      <header class="top-header">
+    loadLiveData();
 
+  }
+);
 
-        <div class="header-left">
 
-          <div>
+// ============================================
+// LOAD LIVE DATA
+// ============================================
 
-            <div class="breadcrumb">
 
-              FOS PERFORMANCE PORTAL
+async function loadLiveData() {
 
-            </div>
 
+  showLoadingScreen();
 
-            <h2>
 
-              Dashboard
+  try {
 
-            </h2>
 
-          </div>
+    console.log(
+      "Loading data from Google Sheet..."
+    );
 
-        </div>
 
+    updateConnectionStatus(
+      "Loading data..."
+    );
 
 
-        <div class="header-right">
+    const response =
+      await fetch(
+        API_URL,
+        {
+          cache: "no-store"
+        }
+      );
 
 
-          <div class="last-updated">
+    if (!response.ok) {
 
-            <span
-              class="live-indicator"
-            ></span>
+      throw new Error(
+        "Server error: " +
+        response.status
+      );
 
+    }
 
-            <span>
 
-              Last updated:
+    const result =
+      await response.json();
 
-              <strong id="lastUpdated">
-                --
-              </strong>
 
-            </span>
+    console.log(
+      "Data received from Google Sheet"
+    );
 
-          </div>
 
+    if (!result.success) {
 
+      throw new Error(
+        result.error ||
+        "Unable to load Google Sheet data"
+      );
 
-          <button
-            class="icon-button"
-            onclick="refreshLiveData()"
-            title="Refresh Data"
-          >
+    }
 
-            ↻
 
-          </button>
+    headers =
+      result.headers || [];
 
 
-        </div>
+    rawRows =
+      result.rows || [];
 
 
-      </header>
+    // ========================================
+    // CONVERT ROWS INTO OBJECTS
+    // ========================================
 
 
+    allData =
+      rawRows.map(
+        function (row) {
 
-      <!-- FILTER BAR -->
 
-      <section class="filter-bar">
+          const obj = {};
 
 
-        <!-- TRAINER FILTER -->
+          headers.forEach(
+            function (
+              header,
+              index
+            ) {
 
-        <div class="filter-group">
 
-          <label>
-            Trainer
-          </label>
+              const columnName =
+                header +
+                "__" +
+                index;
 
 
-          <select id="trainerFilter">
+              obj[columnName] =
+                row[index] ?? "";
 
-            <option value="">
-              All Trainers
-            </option>
 
-          </select>
+            }
+          );
 
-        </div>
 
+          return obj;
 
 
-        <!-- ACTIVE FILTER -->
+        }
+      );
 
-        <div class="filter-group">
 
-          <label>
-            Status
-          </label>
+    filteredData =
+      [...allData];
 
 
-          <select id="statusFilter">
+    console.log(
+      "Total records loaded:",
+      allData.length
+    );
 
-            <option value="">
-              All Members
-            </option>
 
-            <option value="active">
-              Active
-            </option>
+    console.log(
+      "Headers:",
+      headers
+    );
 
-            <option value="inactive">
-              Inactive
-            </option>
 
-          </select>
+    // ========================================
+    // UPDATE EVERYTHING
+    // ========================================
 
-        </div>
 
+    populateTrainerFilter();
 
+    updateDashboard(
+      filteredData
+    );
 
-        <!-- SEARCH -->
 
-        <div class="filter-group search-group">
+    renderTableHeaders();
 
-          <label>
-            Search
-          </label>
+    renderTable(
+      filteredData
+    );
 
 
-          <div class="search-input-wrapper">
+    updateLastUpdated();
 
-            <span class="search-icon">
-              🔍
-            </span>
 
+    updateConnectionStatus(
+      "Live • Connected"
+    );
 
-            <input
-              type="text"
-              id="searchInput"
-              placeholder="Search ECODE, UserName..."
-            >
 
-          </div>
+    hideLoadingScreen();
 
-        </div>
 
+    console.log(
+      "Live data loaded successfully."
+    );
 
 
-        <button
-          class="clear-filter-button"
-          id="clearFilters"
-        >
+  } catch (error) {
 
-          Clear Filters
 
-        </button>
+    console.error(
+      "Data loading error:",
+      error
+    );
 
 
-      </section>
+    updateConnectionStatus(
+      "Connection failed"
+    );
 
 
+    hideLoadingScreen();
 
-      <!-- DASHBOARD -->
 
-      <section
-        class="page-section active-page"
-        id="dashboardPage"
-      >
+    alert(
 
+      "Unable to load live data.\n\n" +
 
-        <!-- WELCOME -->
+      error.message +
 
-        <section class="welcome-section">
+      "\n\nPlease check your Google Apps Script deployment."
 
+    );
 
-          <div>
 
-            <div class="welcome-label">
+  }
 
-              <span class="pulse-dot"></span>
 
-              LIVE PERFORMANCE DATA
+}
 
-            </div>
 
+// ============================================
+// LOADING SCREEN
+// ============================================
 
-            <h2>
 
-              FOS Performance
-              <span>
-                Dashboard
-              </span>
+function showLoadingScreen() {
 
-            </h2>
 
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
 
-            <p>
 
-              Live data directly connected to the
-              FOS Tracker Google Sheet.
+  if (loader) {
 
-            </p>
+    loader.style.display =
+      "flex";
 
-          </div>
+  }
 
 
-          <div class="hero-actions">
+}
 
-            <button
-              class="primary-button"
-              onclick="refreshLiveData()"
-            >
 
-              ↻ Refresh Now
+function hideLoadingScreen() {
 
-            </button>
 
-          </div>
+  const loader =
+    document.getElementById(
+      "loadingScreen"
+    );
 
 
-        </section>
+  if (loader) {
 
+    loader.style.display =
+      "none";
 
+  }
 
-        <!-- KPI CARDS -->
 
-        <section class="kpi-grid">
+}
 
 
-          <div class="kpi-card">
+// ============================================
+// CONNECTION STATUS
+// ============================================
 
-            <div class="kpi-card-top">
 
-              <div class="kpi-icon">
-                👥
-              </div>
+function updateConnectionStatus(message) {
 
-            </div>
 
+  const status =
+    document.getElementById(
+      "sidebarStatus"
+    );
 
-            <div class="kpi-label">
-              Total Members
-            </div>
 
+  if (status) {
 
-            <h2
-              class="kpi-value"
-              id="totalMembers"
-            >
-              0
-            </h2>
+    status.textContent =
+      message;
 
+  }
 
-          </div>
 
+}
 
 
-          <div class="kpi-card highlight-card">
+// ============================================
+// UPDATE LAST UPDATED TIME
+// ============================================
 
-            <div class="kpi-card-top">
 
-              <div class="kpi-icon">
-                🟢
-              </div>
+function updateLastUpdated() {
 
-            </div>
 
+  const element =
+    document.getElementById(
+      "lastUpdated"
+    );
 
-            <div class="kpi-label">
-              Active Members
-            </div>
 
+  if (!element) {
+    return;
+  }
 
-            <h2
-              class="kpi-value"
-              id="activeMembers"
-            >
-              0
-            </h2>
 
+  const now =
+    new Date();
 
-          </div>
 
+  element.textContent =
+    now.toLocaleString(
+      "en-IN",
+      {
+        dateStyle: "medium",
+        timeStyle: "short"
+      }
+    );
 
 
-          <div class="kpi-card">
+}
 
-            <div class="kpi-card-top">
 
-              <div class="kpi-icon">
-                👨‍🏫
-              </div>
+// ============================================
+// POPULATE TRAINER FILTER
+// ============================================
 
-            </div>
 
+function populateTrainerFilter() {
 
-            <div class="kpi-label">
-              Trainers
-            </div>
 
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
 
-            <h2
-              class="kpi-value"
-              id="trainerCount"
-            >
-              0
-            </h2>
 
+  if (!trainerFilter) {
+    return;
+  }
 
-          </div>
 
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
 
 
-          <div class="kpi-card">
+  if (trainerIndex === -1) {
 
-            <div class="kpi-card-top">
+    console.warn(
+      "Trainer column not found"
+    );
 
-              <div class="kpi-icon">
-                📅
-              </div>
+    return;
 
-            </div>
+  }
 
 
-            <div class="kpi-label">
-              Appointments
-            </div>
+  const currentValue =
+    trainerFilter.value;
 
 
-            <h2
-              class="kpi-value"
-              id="appointmentValue"
-            >
-              0
-            </h2>
+  const trainers =
+    new Set();
 
 
-          </div>
+  allData.forEach(
+    function (row) {
 
 
+      const trainer =
+        String(
+          getValue(
+            row,
+            trainerIndex
+          )
+        ).trim();
 
-          <div class="kpi-card">
 
-            <div class="kpi-card-top">
+      if (trainer !== "") {
 
-              <div class="kpi-icon">
-                💰
-              </div>
+        trainers.add(
+          trainer
+        );
 
-            </div>
+      }
 
 
-            <div class="kpi-label">
-              APE
-            </div>
+    }
+  );
 
 
-            <h2
-              class="kpi-value"
-              id="apeValue"
-            >
-              0
-            </h2>
+  trainerFilter.innerHTML =
+    '<option value="">All Trainers</option>';
 
 
-          </div>
+  Array.from(trainers)
+    .sort()
+    .forEach(
+      function (trainer) {
 
 
-        </section>
+        const option =
+          document.createElement(
+            "option"
+          );
 
 
+        option.value =
+          trainer;
 
-        <!-- GROUP KPI CARDS -->
 
-        <section class="dashboard-grid three-column">
+        option.textContent =
+          trainer;
 
 
-          <!-- GROUP 1 -->
+        trainerFilter.appendChild(
+          option
+        );
 
-          <div class="panel">
 
-            <div class="panel-header">
+      }
+    );
 
-              <div>
 
-                <div class="panel-eyebrow">
-                  GROUP 1
-                </div>
+  trainerFilter.value =
+    currentValue;
 
-                <h3>
-                  Appointments
-                </h3>
 
-              </div>
+}
 
-            </div>
 
+// ============================================
+// UPDATE DASHBOARD
+// ============================================
 
-            <h2
-              class="big-number"
-              id="group1Value"
-            >
-              0
-            </h2>
 
+function updateDashboard(data) {
 
-          </div>
 
+  // ----------------------------------------
+  // FIND IMPORTANT COLUMNS
+  // ----------------------------------------
 
 
-          <!-- GROUP 2 -->
+  const isActiveIndex =
+    findColumnIndex([
+      "isactive",
+      "active",
+      "status",
+      "memberstatus"
+    ]);
 
-          <div class="panel">
 
-            <div class="panel-header">
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
 
-              <div>
 
-                <div class="panel-eyebrow">
-                  GROUP 2
-                </div>
+  const appointmentIndex =
+    findColumnIndex([
+      "appointments",
+      "appointment",
+      "totalappointments"
+    ]);
 
-                <h3>
-                  Visits
-                </h3>
 
-              </div>
+  const visitIndex =
+    findColumnIndex([
+      "visits",
+      "visit",
+      "totalvisits"
+    ]);
 
-            </div>
 
+  const bookingIndex =
+    findColumnIndex([
+      "bookings",
+      "booking",
+      "totalbookings"
+    ]);
 
-            <h2
-              class="big-number"
-              id="group2Value"
-            >
-              0
-            </h2>
 
+  const apeIndex =
+    findColumnIndex([
+      "ape",
+      "annualpremiumequivalent"
+    ]);
 
-          </div>
 
+  // ----------------------------------------
+  // TOTAL MEMBERS
+  // ----------------------------------------
 
 
-          <!-- GROUP 3 -->
+  setElementValue(
+    "totalMembers",
+    formatNumber(
+      data.length
+    )
+  );
 
-          <div class="panel">
 
-            <div class="panel-header">
+  // ----------------------------------------
+  // ACTIVE MEMBERS
+  // ----------------------------------------
 
-              <div>
 
-                <div class="panel-eyebrow">
-                  GROUP 3
-                </div>
+  let activeCount =
+    0;
 
-                <h3>
-                  Bookings
-                </h3>
 
-              </div>
+  if (
+    isActiveIndex !== -1
+  ) {
 
-            </div>
 
+    activeCount =
+      data.filter(
+        function (row) {
 
-            <h2
-              class="big-number"
-              id="group3Value"
-            >
-              0
-            </h2>
 
+          const value =
+            String(
+              getValue(
+                row,
+                isActiveIndex
+              )
+            )
+              .trim()
+              .toLowerCase();
 
-          </div>
 
+          return (
 
-          <!-- GROUP 4 -->
+            value === "yes" ||
+            value === "true" ||
+            value === "1" ||
+            value === "active"
 
-          <div class="panel">
+          );
 
-            <div class="panel-header">
 
-              <div>
+        }
+      ).length;
 
-                <div class="panel-eyebrow">
-                  GROUP 4
-                </div>
 
-                <h3>
-                  APE
-                </h3>
+  }
 
-              </div>
 
-            </div>
+  setElementValue(
+    "activeMembers",
+    formatNumber(
+      activeCount
+    )
+  );
 
 
-            <h2
-              class="big-number"
-              id="group4Value"
-            >
-              0
-            </h2>
+  // ----------------------------------------
+  // TRAINERS
+  // ----------------------------------------
 
 
-          </div>
+  const trainers =
+    new Set();
 
 
-        </section>
+  if (
+    trainerIndex !== -1
+  ) {
 
 
+    data.forEach(
+      function (row) {
 
-        <!-- TRAINERS -->
 
-        <section class="panel">
+        const trainer =
+          String(
+            getValue(
+              row,
+              trainerIndex
+            )
+          ).trim();
 
-          <div class="panel-header">
 
-            <div>
+        if (trainer) {
 
-              <div class="panel-eyebrow">
-                TRAINER DIRECTORY
-              </div>
+          trainers.add(
+            trainer
+          );
 
-              <h3>
-                Trainers Available
-              </h3>
+        }
 
-            </div>
 
-          </div>
+      }
+    );
 
 
-          <div
-            id="trainerList"
-            class="trainer-list"
-          >
+  }
 
-          </div>
 
+  setElementValue(
+    "trainerCount",
+    formatNumber(
+      trainers.size
+    )
+  );
 
-        </section>
 
+  // ----------------------------------------
+  // APPOINTMENTS
+  // ----------------------------------------
 
-      </section>
 
+  const appointments =
+    sumColumn(
+      data,
+      appointmentIndex
+    );
 
 
-      <!-- PERFORMANCE PAGE -->
+  setElementValue(
+    "appointmentValue",
+    formatNumber(
+      appointments
+    )
+  );
 
-      <section
-        class="page-section"
-        id="performancePage"
-      >
 
+  setElementValue(
+    "group1Value",
+    formatNumber(
+      appointments
+    )
+  );
 
-        <div class="page-intro">
 
-          <div class="panel-eyebrow">
-            LIVE DATA EXPLORER
-          </div>
+  // ----------------------------------------
+  // VISITS
+  // ----------------------------------------
 
 
-          <h2>
-            FOS Performance Data
-          </h2>
+  const visits =
+    sumColumn(
+      data,
+      visitIndex
+    );
 
 
-          <p>
+  setElementValue(
+    "group2Value",
+    formatNumber(
+      visits
+    )
+  );
 
-            Every column from the FOS Tracker
-            is displayed below.
 
-          </p>
+  // ----------------------------------------
+  // BOOKINGS
+  // ----------------------------------------
 
-        </div>
 
+  const bookings =
+    sumColumn(
+      data,
+      bookingIndex
+    );
 
 
-        <div class="panel">
+  setElementValue(
+    "group3Value",
+    formatNumber(
+      bookings
+    )
+  );
 
 
-          <div class="performance-toolbar">
+  // ----------------------------------------
+  // APE
+  // ----------------------------------------
 
 
-            <div class="search-input-wrapper wide-search">
+  const ape =
+    sumColumn(
+      data,
+      apeIndex
+    );
 
-              <span class="search-icon">
-                🔍
-              </span>
 
+  setElementValue(
+    "apeValue",
+    formatAPE(
+      ape
+    )
+  );
 
-              <input
-                type="text"
-                id="tableSearchInput"
-                placeholder="Search all data..."
-              >
 
-            </div>
+  setElementValue(
+    "group4Value",
+    formatAPE(
+      ape
+    )
+  );
 
 
+  // ----------------------------------------
+  // TRAINER LIST
+  // ----------------------------------------
 
-            <span
-              id="recordCount"
-              class="record-count"
-            >
-              0 Records
-            </span>
 
+  renderTrainerList(
+    data,
+    trainerIndex
+  );
 
-          </div>
 
+}
 
 
-          <div class="table-responsive">
+// ============================================
+// SUM COLUMN
+// ============================================
 
 
-            <table
-              class="performance-table"
-            >
+function sumColumn(
+  data,
+  columnIndex
+) {
 
 
-              <thead>
+  if (
+    columnIndex === -1
+  ) {
 
-                <tr id="tableHead">
+    return 0;
 
-                </tr>
+  }
 
-              </thead>
 
+  return data.reduce(
+    function (
+      total,
+      row
+    ) {
 
 
-              <tbody id="tableBody">
+      return (
+        total +
 
-              </tbody>
+        parseNumber(
+          getValue(
+            row,
+            columnIndex
+          )
+        )
 
+      );
 
-            </table>
 
+    },
+    0
+  );
 
-          </div>
 
+}
 
-        </div>
 
+// ============================================
+// SET ELEMENT VALUE
+// ============================================
 
-      </section>
 
+function setElementValue(
+  id,
+  value
+) {
 
 
-    </main>
+  const element =
+    document.getElementById(
+      id
+    );
 
 
-  </div>
+  if (element) {
 
+    element.textContent =
+      value;
 
+  }
 
-  <!-- SCRIPT -->
 
-  <script src="app.js"></script>
+}
 
 
-</body>
+// ============================================
+// TRAINER LIST
+// ============================================
 
-</html>
+
+function renderTrainerList(
+  data,
+  trainerIndex
+) {
+
+
+  const container =
+    document.getElementById(
+      "trainerList"
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  container.innerHTML =
+    "";
+
+
+  if (
+    trainerIndex === -1
+  ) {
+
+
+    container.innerHTML =
+
+      '<div class="empty-state">' +
+
+      'Trainer column was not found in the Google Sheet.' +
+
+      '</div>';
+
+
+    return;
+
+
+  }
+
+
+  const trainerCounts =
+    {};
+
+
+  data.forEach(
+    function (row) {
+
+
+      const trainer =
+        String(
+          getValue(
+            row,
+            trainerIndex
+          )
+        ).trim();
+
+
+      if (!trainer) {
+        return;
+      }
+
+
+      if (!trainerCounts[trainer]) {
+
+        trainerCounts[trainer] =
+          0;
+
+      }
+
+
+      trainerCounts[trainer]++;
+
+
+    }
+  );
+
+
+  const trainers =
+    Object.keys(
+      trainerCounts
+    ).sort();
+
+
+  if (
+    trainers.length === 0
+  ) {
+
+
+    container.innerHTML =
+
+      '<div class="empty-state">' +
+
+      'No trainers found.' +
+
+      '</div>';
+
+
+    return;
+
+
+  }
+
+
+  trainers.forEach(
+    function (trainer) {
+
+
+      const card =
+        document.createElement(
+          "div"
+        );
+
+
+      card.className =
+        "trainer-card";
+
+
+      const initials =
+        trainer
+          .split(" ")
+          .map(
+            function (word) {
+
+              return word[0];
+
+            }
+          )
+          .join("")
+          .substring(
+            0,
+            2
+          )
+          .toUpperCase();
+
+
+      card.innerHTML =
+
+        '<div class="trainer-avatar">' +
+
+        initials +
+
+        '</div>' +
+
+
+        '<div class="trainer-info">' +
+
+        '<strong>' +
+
+        escapeHTML(
+          trainer
+        ) +
+
+        '</strong>' +
+
+
+        '<span>' +
+
+        formatNumber(
+          trainerCounts[trainer]
+        ) +
+
+        ' records</span>' +
+
+        '</div>';
+
+
+      container.appendChild(
+        card
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// TABLE HEADERS
+// ============================================
+
+
+function renderTableHeaders() {
+
+
+  const tableHead =
+    document.getElementById(
+      "tableHead"
+    );
+
+
+  if (!tableHead) {
+    return;
+  }
+
+
+  tableHead.innerHTML =
+    "";
+
+
+  headers.forEach(
+    function (
+      header,
+      index
+    ) {
+
+
+      const th =
+        document.createElement(
+          "th"
+        );
+
+
+      th.textContent =
+        header ||
+        (
+          "Column " +
+          (
+            index + 1
+          )
+        );
+
+
+      tableHead.appendChild(
+        th
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// RENDER TABLE
+// ============================================
+
+
+function renderTable(data) {
+
+
+  const tableBody =
+    document.getElementById(
+      "tableBody"
+    );
+
+
+  const recordCount =
+    document.getElementById(
+      "recordCount"
+    );
+
+
+  if (
+    recordCount
+  ) {
+
+    recordCount.textContent =
+
+      formatNumber(
+        data.length
+      ) +
+
+      " Records";
+
+
+  }
+
+
+  if (!tableBody) {
+    return;
+  }
+
+
+  tableBody.innerHTML =
+    "";
+
+
+  if (
+    data.length === 0
+  ) {
+
+
+    const tr =
+      document.createElement(
+        "tr"
+      );
+
+
+    tr.className =
+      "empty-row";
+
+
+    const td =
+      document.createElement(
+        "td"
+      );
+
+
+    td.colSpan =
+      Math.max(
+        headers.length,
+        1
+      );
+
+
+    td.textContent =
+      "No records found.";
+
+
+    tr.appendChild(
+      td
+    );
+
+
+    tableBody.appendChild(
+      tr
+    );
+
+
+    return;
+
+
+  }
+
+
+  // Render all rows
+
+  data.forEach(
+    function (row) {
+
+
+      const tr =
+        document.createElement(
+          "tr"
+        );
+
+
+      headers.forEach(
+        function (
+          header,
+          index
+        ) {
+
+
+          const td =
+            document.createElement(
+              "td"
+            );
+
+
+          td.textContent =
+            getValue(
+              row,
+              index
+            );
+
+
+          tr.appendChild(
+            td
+          );
+
+
+        }
+      );
+
+
+      tableBody.appendChild(
+        tr
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// FILTERS
+// ============================================
+
+
+function setupFilters() {
+
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  const statusFilter =
+    document.getElementById(
+      "statusFilter"
+    );
+
+
+  const searchInput =
+    document.getElementById(
+      "searchInput"
+    );
+
+
+  const tableSearchInput =
+    document.getElementById(
+      "tableSearchInput"
+    );
+
+
+  const clearFilters =
+    document.getElementById(
+      "clearFilters"
+    );
+
+
+  if (
+    trainerFilter
+  ) {
+
+    trainerFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    statusFilter
+  ) {
+
+    statusFilter.addEventListener(
+      "change",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    searchInput
+  ) {
+
+    searchInput.addEventListener(
+      "input",
+      applyFilters
+    );
+
+  }
+
+
+  if (
+    tableSearchInput
+  ) {
+
+    tableSearchInput.addEventListener(
+
+      "input",
+
+      function () {
+
+
+        const searchText =
+          tableSearchInput.value
+            .trim()
+            .toLowerCase();
+
+
+        const searchedData =
+          filteredData.filter(
+            function (row) {
+
+
+              return rowMatchesSearch(
+                row,
+                searchText
+              );
+
+
+            }
+          );
+
+
+        renderTable(
+          searchedData
+        );
+
+
+      }
+
+    );
+
+  }
+
+
+  if (
+    clearFilters
+  ) {
+
+
+    clearFilters.addEventListener(
+
+      "click",
+
+      function () {
+
+
+        if (trainerFilter) {
+
+          trainerFilter.value =
+            "";
+
+        }
+
+
+        if (statusFilter) {
+
+          statusFilter.value =
+            "";
+
+        }
+
+
+        if (searchInput) {
+
+          searchInput.value =
+            "";
+
+        }
+
+
+        if (tableSearchInput) {
+
+          tableSearchInput.value =
+            "";
+
+        }
+
+
+        applyFilters();
+
+
+      }
+
+    );
+
+
+  }
+
+
+}
+
+
+// ============================================
+// APPLY FILTERS
+// ============================================
+
+
+function applyFilters() {
+
+
+  const trainerFilter =
+    document.getElementById(
+      "trainerFilter"
+    );
+
+
+  const statusFilter =
+    document.getElementById(
+      "statusFilter"
+    );
+
+
+  const searchInput =
+    document.getElementById(
+      "searchInput"
+    );
+
+
+  const trainerValue =
+    trainerFilter
+      ? trainerFilter.value
+      : "";
+
+
+  const statusValue =
+    statusFilter
+      ? statusFilter.value
+      : "";
+
+
+  const searchValue =
+    searchInput
+      ? searchInput.value
+          .trim()
+          .toLowerCase()
+      : "";
+
+
+  const trainerIndex =
+    findColumnIndex([
+      "trainer",
+      "trainername",
+      "trainer name"
+    ]);
+
+
+  const statusIndex =
+    findColumnIndex([
+      "isactive",
+      "active",
+      "status",
+      "memberstatus"
+    ]);
+
+
+  filteredData =
+    allData.filter(
+      function (row) {
+
+
+        // TRAINER FILTER
+
+        if (
+          trainerValue &&
+          trainerIndex !== -1
+        ) {
+
+
+          const trainer =
+            String(
+              getValue(
+                row,
+                trainerIndex
+              )
+            ).trim();
+
+
+          if (
+            trainer !==
+            trainerValue
+          ) {
+
+            return false;
+
+          }
+
+
+        }
+
+
+        // STATUS FILTER
+
+        if (
+          statusValue &&
+          statusIndex !== -1
+        ) {
+
+
+          const status =
+            String(
+              getValue(
+                row,
+                statusIndex
+              )
+            )
+              .trim()
+              .toLowerCase();
+
+
+          const isActive =
+
+            status === "yes" ||
+            status === "true" ||
+            status === "1" ||
+            status === "active";
+
+
+          if (
+            statusValue === "active" &&
+            !isActive
+          ) {
+
+            return false;
+
+          }
+
+
+          if (
+            statusValue === "inactive" &&
+            isActive
+          ) {
+
+            return false;
+
+          }
+
+
+        }
+
+
+        // SEARCH
+
+        if (
+          searchValue &&
+          !rowMatchesSearch(
+            row,
+            searchValue
+          )
+        ) {
+
+          return false;
+
+        }
+
+
+        return true;
+
+
+      }
+    );
+
+
+  updateDashboard(
+    filteredData
+  );
+
+
+  renderTable(
+    filteredData
+  );
+
+
+}
+
+
+// ============================================
+// ROW SEARCH
+// ============================================
+
+
+function rowMatchesSearch(
+  row,
+  searchText
+) {
+
+
+  if (!searchText) {
+    return true;
+  }
+
+
+  return headers.some(
+    function (
+      header,
+      index
+    ) {
+
+
+      const value =
+        String(
+          getValue(
+            row,
+            index
+          )
+        )
+          .toLowerCase();
+
+
+      return value.includes(
+        searchText
+      );
+
+
+    }
+  );
+
+
+}
+
+
+// ============================================
+// NAVIGATION
+// ============================================
+
+
+function setupNavigation() {
+
+
+  const dashboardNav =
+    document.getElementById(
+      "dashboardNav"
+    );
+
+
+  const performanceNav =
+    document.getElementById(
+      "performanceNav"
+    );
+
+
+  if (
+    dashboardNav
+  ) {
+
+
+    dashboardNav.addEventListener(
+
+      "click",
+
+      function () {
+
+
+        showPage(
+          "dashboard"
+        );
+
+
+      }
+
+    );
+
+
+  }
+
+
+  if (
+    performanceNav
+  ) {
+
+
+    performanceNav.addEventListener(
+
+      "click",
+
+      function () {
+
+
+        showPage(
+          "performance"
+        );
+
+
+      }
+
+    );
+
+
+  }
+
+
+}
+
+
+// ============================================
+// SHOW PAGE
+// ============================================
+
+
+function showPage(
+  page
+) {
+
+
+  const dashboardPage =
+    document.getElementById(
+      "dashboardPage"
+    );
+
+
+  const performancePage =
+    document.getElementById(
+      "performancePage"
+    );
+
+
+  const dashboardNav =
+    document.getElementById(
+      "dashboardNav"
+    );
+
+
+  const performanceNav =
+    document.getElementById(
+      "performanceNav"
+    );
+
+
+  const pageTitle =
+    document.getElementById(
+      "pageTitle"
+    );
+
+
+  if (
+    page === "dashboard"
+  ) {
+
+
+    dashboardPage.classList.add(
+      "active-page"
+    );
+
+
+    performancePage.classList.remove(
+      "active-page"
+    );
+
+
+    dashboardNav.classList.add(
+      "active"
+    );
+
+
+    performanceNav.classList.remove(
+      "active"
+    );
+
+
+    if (pageTitle) {
+
+      pageTitle.textContent =
+        "Dashboard";
+
+    }
+
+
+  }
+
+
+  if (
+    page === "performance"
+  ) {
+
+
+    performancePage.classList.add(
+      "active-page"
+    );
+
+
+    dashboardPage.classList.remove(
+      "active-page"
+    );
+
+
+    performanceNav.classList.add(
+      "active"
+    );
+
+
+    dashboardNav.classList.remove(
+      "active"
+    );
+
+
+    if (pageTitle) {
+
+      pageTitle.textContent =
+        "Performance Data";
+
+    }
+
+
+  }
+
+
+}
+
+
+// ============================================
+// ESCAPE HTML
+// ============================================
+
+
+function escapeHTML(text) {
+
+
+  const div =
+    document.createElement(
+      "div"
+    );
+
+
+  div.textContent =
+    text;
+
+
+  return div.innerHTML;
+
+
+}
+
+
+// ============================================
+// MANUAL REFRESH
+// ============================================
+
+
+function refreshLiveData() {
+
+
+  console.log(
+    "Manual refresh started..."
+  );
+
+
+  loadLiveData();
+
+
+}
+
+
+// ============================================
+// AUTO REFRESH - EVERY 5 MINUTES
+// ============================================
+
+
+setInterval(
+  function () {
+
+
+    console.log(
+      "Auto-refreshing live data..."
+    );
+
+
+    loadLiveData();
+
+
+  },
+
+  300000
+);

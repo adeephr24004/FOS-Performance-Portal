@@ -1,14 +1,14 @@
 // ============================================
-// FOS PERFORMANCE PORTAL
-// LIVE GOOGLE SHEETS CONNECTION
+// FOS PERFORMANCE PORTAL - LIVE DATA
 // ============================================
 
 const API_URL =
-  "https://script.google.com/macros/s/AKfycbwtZn7_c4J_xMBojwbUp-rP9nmzh9gobMxcGRsTP6awP7y8Ea6N49fnO10VmoyFT8M/exec";
+  "https://script.google.com/macros/s/AKfycbzU_SubIsUJaJ-ffGnp_yRc8CvEXMRZB4eccAAVa6qTmhp6RwLI8-LK-wVwwzo1gRc/exec";
 
 let allData = [];
+let headers = [];
 
-// Start when website opens
+
 document.addEventListener("DOMContentLoaded", function () {
   console.log("Starting FOS Performance Portal");
   loadLiveData();
@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 
 // ============================================
-// LOAD DATA
+// LOAD LIVE DATA
 // ============================================
 
 async function loadLiveData() {
@@ -28,43 +28,69 @@ async function loadLiveData() {
     const response = await fetch(API_URL);
 
     if (!response.ok) {
-      throw new Error(
-        "Server error: " + response.status
-      );
+      throw new Error("Server error: " + response.status);
     }
 
     const result = await response.json();
 
-    console.log("Data received:", result);
+    console.log("Data received from Google Sheet");
 
     if (!result.success) {
       throw new Error(
-        result.error || "Google Sheet returned an error"
+        result.error || "Unable to load Google Sheet data"
       );
     }
 
-    allData = result.data || [];
+
+    headers = result.headers || [];
+    const rows = result.rows || [];
+
+
+    // Convert rows into objects
+    allData = rows.map(function (row) {
+
+      const obj = {};
+
+      headers.forEach(function (header, index) {
+
+        // Keep duplicate headers separate internally
+        const columnName =
+          header + "__" + index;
+
+        obj[columnName] =
+          row[index] ?? "";
+
+      });
+
+      return obj;
+
+    });
+
 
     console.log(
       "Total records loaded:",
       allData.length
     );
 
-    // Hide loading screen
+
     hideLoadingScreen();
 
-    // Show data
-    displayData();
+    displayData(rows);
+
 
   } catch (error) {
 
-    console.error("Data loading error:", error);
+    console.error(
+      "Data loading error:",
+      error
+    );
 
     hideLoadingScreen();
 
-    showError(
-      "Unable to load live data. " +
-      "Please refresh the page."
+    alert(
+      "Unable to load live data.\n\n" +
+      error.message +
+      "\n\nPlease check your Google Apps Script deployment."
     );
 
   }
@@ -82,9 +108,7 @@ function hideLoadingScreen() {
     document.getElementById("loadingScreen");
 
   if (loader) {
-
     loader.style.display = "none";
-
   }
 
 }
@@ -94,57 +118,44 @@ function hideLoadingScreen() {
 // DISPLAY DATA
 // ============================================
 
-function displayData() {
+function displayData(rows) {
 
-  console.log(
-    "Website successfully connected to live data."
-  );
+  console.log("Displaying live data...");
 
-  // Find existing table body
+
   const tableBody =
     document.getElementById("tableBody");
 
+
+  // If your existing website doesn't have tableBody,
+  // data is still successfully loaded.
   if (!tableBody) {
 
     console.log(
-      "tableBody not found yet. Data is loaded successfully."
+      "Live data loaded successfully."
     );
 
     return;
 
   }
 
+
   tableBody.innerHTML = "";
 
-  if (allData.length === 0) {
 
-    tableBody.innerHTML =
-      "<tr><td>No data available</td></tr>";
-
-    return;
-
-  }
-
-
-  // Automatically get ALL columns
-  const columns =
-    Object.keys(allData[0]);
-
-
-  // Add rows
-  allData.forEach(function (row) {
+  rows.forEach(function (row) {
 
     const tr =
       document.createElement("tr");
 
 
-    columns.forEach(function (column) {
+    row.forEach(function (cell) {
 
       const td =
         document.createElement("td");
 
       td.textContent =
-        row[column] || "";
+        cell ?? "";
 
       tr.appendChild(td);
 
@@ -167,6 +178,17 @@ function displayData() {
 
 function updateDashboard() {
 
+  // Find exact IsActive column
+  const isActiveIndex =
+    headers.findIndex(function (header) {
+
+      return String(header)
+        .trim()
+        .toLowerCase() === "isactive";
+
+    });
+
+
   // Total members
   const totalMembers =
     document.getElementById("totalMembers");
@@ -183,23 +205,29 @@ function updateDashboard() {
   const activeMembers =
     document.getElementById("activeMembers");
 
-  if (activeMembers) {
+  if (
+    activeMembers &&
+    isActiveIndex !== -1
+  ) {
 
     const activeCount =
       allData.filter(function (row) {
 
-        const status =
-          String(
-            row["IsActive"] || ""
-          )
-            .toLowerCase()
-            .trim();
+        const key =
+          headers[isActiveIndex] +
+          "__" +
+          isActiveIndex;
+
+        const value =
+          String(row[key] || "")
+            .trim()
+            .toLowerCase();
 
         return (
-          status === "yes" ||
-          status === "true" ||
-          status === "1" ||
-          status === "active"
+          value === "yes" ||
+          value === "true" ||
+          value === "1" ||
+          value === "active"
         );
 
       }).length;
@@ -211,11 +239,25 @@ function updateDashboard() {
   }
 
 
-  // Trainers
+  // Find Trainer column
+  const trainerIndex =
+    headers.findIndex(function (header) {
+
+      return String(header)
+        .trim()
+        .toLowerCase() === "trainer";
+
+    });
+
+
+  // Trainer count
   const trainerCount =
     document.getElementById("trainerCount");
 
-  if (trainerCount) {
+  if (
+    trainerCount &&
+    trainerIndex !== -1
+  ) {
 
     const trainers =
       new Set();
@@ -223,15 +265,17 @@ function updateDashboard() {
 
     allData.forEach(function (row) {
 
-      if (
-        row["Trainer"] &&
-        String(row["Trainer"]).trim() !== ""
-      ) {
+      const key =
+        headers[trainerIndex] +
+        "__" +
+        trainerIndex;
 
-        trainers.add(
-          row["Trainer"]
-        );
+      const trainer =
+        String(row[key] || "").trim();
 
+
+      if (trainer !== "") {
+        trainers.add(trainer);
       }
 
     });
@@ -246,40 +290,12 @@ function updateDashboard() {
 
 
 // ============================================
-// REFRESH BUTTON
+// MANUAL REFRESH
 // ============================================
 
 function refreshLiveData() {
 
-  console.log("Refreshing live data...");
-
   loadLiveData();
-
-}
-
-
-// ============================================
-// SHOW ERROR
-// ============================================
-
-function showError(message) {
-
-  const errorBox =
-    document.getElementById("errorMessage");
-
-  if (errorBox) {
-
-    errorBox.textContent =
-      message;
-
-    errorBox.style.display =
-      "block";
-
-  } else {
-
-    console.error(message);
-
-  }
 
 }
 

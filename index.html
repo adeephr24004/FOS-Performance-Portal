@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -15,47 +17,44 @@
     href="style.css"
   >
 
-  <!-- SheetJS -->
-  <script
-    src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"
-  ></script>
-
-  <!-- Chart.js -->
-  <script
-    src="https://cdn.jsdelivr.net/npm/chart.js"
-  ></script>
-
 </head>
+
 
 <body>
 
-  <!-- =========================
-       LOADING SCREEN
-  ========================== -->
 
-  <div id="loadingScreen" class="loading-screen">
+  <!-- LOADING SCREEN -->
 
-    <div class="loader"></div>
+  <div
+    id="loadingScreen"
+    class="loading-screen"
+  >
 
-    <h2>FOS Performance Portal</h2>
+    <div class="loader-box">
 
-    <p>Loading live data...</p>
+      <div class="loader"></div>
+
+      <h2>Loading FOS Tracker</h2>
+
+      <p>
+        Fetching live data from Google Sheets...
+      </p>
+
+    </div>
 
   </div>
 
 
-  <!-- =========================
-       APP
-  ========================== -->
 
-  <div id="app" class="app hidden">
+  <!-- APP -->
+
+  <div class="app-shell">
 
 
-    <!-- =========================
-         SIDEBAR
-    ========================== -->
+    <!-- SIDEBAR -->
 
     <aside class="sidebar">
+
 
       <div class="brand">
 
@@ -63,80 +62,99 @@
           F
         </div>
 
-        <div>
 
-          <h2>FOS Portal</h2>
+        <div class="brand-text">
 
-          <span>Performance Dashboard</span>
+          <h1>
+            FOS Portal
+          </h1>
+
+          <span>
+            PERFORMANCE TRACKER
+          </span>
 
         </div>
 
       </div>
 
 
-      <nav class="nav-menu">
+
+      <nav class="sidebar-nav">
 
         <button
           class="nav-item active"
-          data-section="dashboard"
         >
-          <span>📊</span>
+
+          <span class="nav-icon">
+            📊
+          </span>
+
           Dashboard
+
         </button>
 
 
         <button
           class="nav-item"
-          data-section="employees"
+          id="performanceNav"
         >
-          <span>👥</span>
-          FOS Directory
+
+          <span class="nav-icon">
+            📈
+          </span>
+
+          Performance Data
+
         </button>
 
-
-        <button
-          class="nav-item"
-          data-section="analytics"
-        >
-          <span>📈</span>
-          Analytics
-        </button>
-
-
-        <button
-          class="nav-item"
-          data-section="data"
-        >
-          <span>🗂️</span>
-          All Parameters
-        </button>
 
       </nav>
 
 
+
       <div class="sidebar-bottom">
 
-        <button id="refreshBtn" class="refresh-btn">
+        <div class="upload-status">
 
-          ↻ Refresh Live Data
+          <span
+            class="status-dot"
+          ></span>
+
+
+          <div>
+
+            <strong>
+              LIVE DATA
+            </strong>
+
+            <small id="sidebarStatus">
+
+              Connecting...
+
+            </small>
+
+          </div>
+
+        </div>
+
+
+        <button
+          class="upload-button"
+          onclick="refreshLiveData()"
+        >
+
+          ↻ Refresh Data
 
         </button>
 
-
-        <p id="lastUpdated">
-
-          Loading...
-
-        </p>
-
       </div>
+
 
     </aside>
 
 
-    <!-- =========================
-         MAIN CONTENT
-    ========================== -->
+
+    <!-- MAIN CONTENT -->
 
     <main class="main-content">
 
@@ -145,435 +163,668 @@
 
       <header class="top-header">
 
-        <div>
 
-          <h1 id="pageTitle">
+        <div class="header-left">
 
-            FOS Performance Dashboard
+          <div>
 
-          </h1>
+            <div class="breadcrumb">
+
+              FOS PERFORMANCE PORTAL
+
+            </div>
+
+
+            <h2>
+
+              Dashboard
+
+            </h2>
+
+          </div>
+
+        </div>
+
+
+
+        <div class="header-right">
+
+
+          <div class="last-updated">
+
+            <span
+              class="live-indicator"
+            ></span>
+
+
+            <span>
+
+              Last updated:
+
+              <strong id="lastUpdated">
+                --
+              </strong>
+
+            </span>
+
+          </div>
+
+
+
+          <button
+            class="icon-button"
+            onclick="refreshLiveData()"
+            title="Refresh Data"
+          >
+
+            ↻
+
+          </button>
+
+
+        </div>
+
+
+      </header>
+
+
+
+      <!-- FILTER BAR -->
+
+      <section class="filter-bar">
+
+
+        <!-- TRAINER FILTER -->
+
+        <div class="filter-group">
+
+          <label>
+            Trainer
+          </label>
+
+
+          <select id="trainerFilter">
+
+            <option value="">
+              All Trainers
+            </option>
+
+          </select>
+
+        </div>
+
+
+
+        <!-- ACTIVE FILTER -->
+
+        <div class="filter-group">
+
+          <label>
+            Status
+          </label>
+
+
+          <select id="statusFilter">
+
+            <option value="">
+              All Members
+            </option>
+
+            <option value="active">
+              Active
+            </option>
+
+            <option value="inactive">
+              Inactive
+            </option>
+
+          </select>
+
+        </div>
+
+
+
+        <!-- SEARCH -->
+
+        <div class="filter-group search-group">
+
+          <label>
+            Search
+          </label>
+
+
+          <div class="search-input-wrapper">
+
+            <span class="search-icon">
+              🔍
+            </span>
+
+
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="Search ECODE, UserName..."
+            >
+
+          </div>
+
+        </div>
+
+
+
+        <button
+          class="clear-filter-button"
+          id="clearFilters"
+        >
+
+          Clear Filters
+
+        </button>
+
+
+      </section>
+
+
+
+      <!-- DASHBOARD -->
+
+      <section
+        class="page-section active-page"
+        id="dashboardPage"
+      >
+
+
+        <!-- WELCOME -->
+
+        <section class="welcome-section">
+
+
+          <div>
+
+            <div class="welcome-label">
+
+              <span class="pulse-dot"></span>
+
+              LIVE PERFORMANCE DATA
+
+            </div>
+
+
+            <h2>
+
+              FOS Performance
+              <span>
+                Dashboard
+              </span>
+
+            </h2>
+
+
+            <p>
+
+              Live data directly connected to the
+              FOS Tracker Google Sheet.
+
+            </p>
+
+          </div>
+
+
+          <div class="hero-actions">
+
+            <button
+              class="primary-button"
+              onclick="refreshLiveData()"
+            >
+
+              ↻ Refresh Now
+
+            </button>
+
+          </div>
+
+
+        </section>
+
+
+
+        <!-- KPI CARDS -->
+
+        <section class="kpi-grid">
+
+
+          <div class="kpi-card">
+
+            <div class="kpi-card-top">
+
+              <div class="kpi-icon">
+                👥
+              </div>
+
+            </div>
+
+
+            <div class="kpi-label">
+              Total Members
+            </div>
+
+
+            <h2
+              class="kpi-value"
+              id="totalMembers"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <div class="kpi-card highlight-card">
+
+            <div class="kpi-card-top">
+
+              <div class="kpi-icon">
+                🟢
+              </div>
+
+            </div>
+
+
+            <div class="kpi-label">
+              Active Members
+            </div>
+
+
+            <h2
+              class="kpi-value"
+              id="activeMembers"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <div class="kpi-card">
+
+            <div class="kpi-card-top">
+
+              <div class="kpi-icon">
+                👨‍🏫
+              </div>
+
+            </div>
+
+
+            <div class="kpi-label">
+              Trainers
+            </div>
+
+
+            <h2
+              class="kpi-value"
+              id="trainerCount"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <div class="kpi-card">
+
+            <div class="kpi-card-top">
+
+              <div class="kpi-icon">
+                📅
+              </div>
+
+            </div>
+
+
+            <div class="kpi-label">
+              Appointments
+            </div>
+
+
+            <h2
+              class="kpi-value"
+              id="appointmentValue"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <div class="kpi-card">
+
+            <div class="kpi-card-top">
+
+              <div class="kpi-icon">
+                💰
+              </div>
+
+            </div>
+
+
+            <div class="kpi-label">
+              APE
+            </div>
+
+
+            <h2
+              class="kpi-value"
+              id="apeValue"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+        </section>
+
+
+
+        <!-- GROUP KPI CARDS -->
+
+        <section class="dashboard-grid three-column">
+
+
+          <!-- GROUP 1 -->
+
+          <div class="panel">
+
+            <div class="panel-header">
+
+              <div>
+
+                <div class="panel-eyebrow">
+                  GROUP 1
+                </div>
+
+                <h3>
+                  Appointments
+                </h3>
+
+              </div>
+
+            </div>
+
+
+            <h2
+              class="big-number"
+              id="group1Value"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <!-- GROUP 2 -->
+
+          <div class="panel">
+
+            <div class="panel-header">
+
+              <div>
+
+                <div class="panel-eyebrow">
+                  GROUP 2
+                </div>
+
+                <h3>
+                  Visits
+                </h3>
+
+              </div>
+
+            </div>
+
+
+            <h2
+              class="big-number"
+              id="group2Value"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+
+          <!-- GROUP 3 -->
+
+          <div class="panel">
+
+            <div class="panel-header">
+
+              <div>
+
+                <div class="panel-eyebrow">
+                  GROUP 3
+                </div>
+
+                <h3>
+                  Bookings
+                </h3>
+
+              </div>
+
+            </div>
+
+
+            <h2
+              class="big-number"
+              id="group3Value"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+          <!-- GROUP 4 -->
+
+          <div class="panel">
+
+            <div class="panel-header">
+
+              <div>
+
+                <div class="panel-eyebrow">
+                  GROUP 4
+                </div>
+
+                <h3>
+                  APE
+                </h3>
+
+              </div>
+
+            </div>
+
+
+            <h2
+              class="big-number"
+              id="group4Value"
+            >
+              0
+            </h2>
+
+
+          </div>
+
+
+        </section>
+
+
+
+        <!-- TRAINERS -->
+
+        <section class="panel">
+
+          <div class="panel-header">
+
+            <div>
+
+              <div class="panel-eyebrow">
+                TRAINER DIRECTORY
+              </div>
+
+              <h3>
+                Trainers Available
+              </h3>
+
+            </div>
+
+          </div>
+
+
+          <div
+            id="trainerList"
+            class="trainer-list"
+          >
+
+          </div>
+
+
+        </section>
+
+
+      </section>
+
+
+
+      <!-- PERFORMANCE PAGE -->
+
+      <section
+        class="page-section"
+        id="performancePage"
+      >
+
+
+        <div class="page-intro">
+
+          <div class="panel-eyebrow">
+            LIVE DATA EXPLORER
+          </div>
+
+
+          <h2>
+            FOS Performance Data
+          </h2>
+
 
           <p>
 
-            Live performance data from RM Tracker FOS
+            Every column from the FOS Tracker
+            is displayed below.
 
           </p>
 
         </div>
 
 
-        <div class="header-actions">
 
-          <div
-            id="dataStatus"
-            class="status-badge"
-          >
-
-            ● Live Data
-
-          </div>
-
-        </div>
-
-      </header>
+        <div class="panel">
 
 
-      <!-- =========================
-           GLOBAL FILTERS
-      ========================== -->
-
-      <section class="filter-panel">
-
-        <div class="filter-panel-header">
-
-          <h3>Filters</h3>
-
-          <button
-            id="clearFilters"
-            class="clear-btn"
-          >
-
-            Clear Filters
-
-          </button>
-
-        </div>
+          <div class="performance-toolbar">
 
 
-        <div
-          id="dynamicFilters"
-          class="filters-grid"
-        >
+            <div class="search-input-wrapper wide-search">
 
-          <!-- Dynamic Filters -->
-
-        </div>
-
-      </section>
+              <span class="search-icon">
+                🔍
+              </span>
 
 
-      <!-- =========================
-           DASHBOARD
-      ========================== -->
-
-      <section
-        id="dashboard"
-        class="content-section active-section"
-      >
-
-
-        <!-- KPI CARDS -->
-
-        <div
-          id="kpiCards"
-          class="kpi-grid"
-        >
-
-          <!-- Dynamic KPI Cards -->
-
-        </div>
-
-
-        <!-- CHARTS -->
-
-        <div class="charts-grid">
-
-          <div class="chart-card">
-
-            <div class="card-header">
-
-              <h3>Performance Overview</h3>
+              <input
+                type="text"
+                id="tableSearchInput"
+                placeholder="Search all data..."
+              >
 
             </div>
 
-            <canvas
-              id="performanceChart"
-            ></canvas>
+
+
+            <span
+              id="recordCount"
+              class="record-count"
+            >
+              0 Records
+            </span>
+
 
           </div>
 
 
-          <div class="chart-card">
 
-            <div class="card-header">
-
-              <h3>Top Performers</h3>
-
-            </div>
-
-            <canvas
-              id="topPerformersChart"
-            ></canvas>
-
-          </div>
-
-        </div>
+          <div class="table-responsive">
 
 
-        <!-- DAILY PERFORMANCE -->
+            <table
+              class="performance-table"
+            >
 
-        <div class="section-card">
-
-          <div class="card-header">
-
-            <div>
-
-              <h3>Daily Performance</h3>
-
-              <p>
-                Appointments, Visits, Bookings and APE
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div class="daily-controls">
-
-            <select id="dailyMetric">
-
-              <option value="Appointment">
-                Appointments
-              </option>
-
-              <option value="Visit">
-                Visits
-              </option>
-
-              <option value="Booking">
-                Bookings
-              </option>
-
-              <option value="APE">
-                APE
-              </option>
-
-            </select>
-
-          </div>
-
-
-          <div class="daily-chart-container">
-
-            <canvas
-              id="dailyChart"
-            ></canvas>
-
-          </div>
-
-        </div>
-
-
-        <!-- TOP TABLE -->
-
-        <div class="section-card">
-
-          <div class="card-header">
-
-            <h3>Top FOS Performance</h3>
-
-          </div>
-
-
-          <div class="table-wrapper">
-
-            <table id="topTable">
 
               <thead>
 
-                <tr>
-
-                  <th>ECODE</th>
-                  <th>User Name</th>
-                  <th>Trainer</th>
-                  <th>Visits</th>
-                  <th>Bookings</th>
-                  <th>APE</th>
-                  <th>Projection</th>
+                <tr id="tableHead">
 
                 </tr>
 
               </thead>
 
 
-              <tbody>
+
+              <tbody id="tableBody">
 
               </tbody>
 
-            </table>
-
-          </div>
-
-        </div>
-
-
-      </section>
-
-
-      <!-- =========================
-           FOS DIRECTORY
-      ========================== -->
-
-      <section
-        id="employees"
-        class="content-section"
-      >
-
-        <div class="section-card">
-
-          <div class="card-header directory-header">
-
-            <div>
-
-              <h3>FOS Directory</h3>
-
-              <p id="employeeCount">
-                0 records
-              </p>
-
-            </div>
-
-
-            <input
-              type="text"
-              id="employeeSearch"
-              placeholder="Search anything..."
-            >
-
-          </div>
-
-
-          <div class="table-wrapper">
-
-            <table
-              id="employeeTable"
-            >
-
-              <thead>
-
-              </thead>
-
-              <tbody>
-
-              </tbody>
 
             </table>
 
+
           </div>
 
+
         </div>
+
 
       </section>
 
-
-      <!-- =========================
-           ANALYTICS
-      ========================== -->
-
-      <section
-        id="analytics"
-        class="content-section"
-      >
-
-        <div class="analytics-controls">
-
-          <div>
-
-            <label>
-
-              Select Parameter
-
-            </label>
-
-
-            <select
-              id="analyticsParameter"
-            >
-
-            </select>
-
-          </div>
-
-        </div>
-
-
-        <div class="section-card">
-
-          <div class="card-header">
-
-            <h3 id="analyticsTitle">
-
-              Parameter Analysis
-
-            </h3>
-
-          </div>
-
-
-          <canvas
-            id="analyticsChart"
-          ></canvas>
-
-        </div>
-
-
-        <div class="section-card">
-
-          <div
-            id="analyticsSummary"
-            class="analytics-summary"
-          >
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      <!-- =========================
-           ALL PARAMETERS
-      ========================== -->
-
-      <section
-        id="data"
-        class="content-section"
-      >
-
-        <div class="section-card">
-
-          <div class="card-header">
-
-            <div>
-
-              <h3>All Parameters</h3>
-
-              <p>
-
-                Every parameter currently available
-                in RM Tracker FOS
-
-              </p>
-
-            </div>
-
-          </div>
-
-
-          <div class="parameter-search">
-
-            <input
-              type="text"
-              id="parameterSearch"
-              placeholder="Search parameter..."
-            >
-
-          </div>
-
-
-          <div
-            id="parameterList"
-            class="parameter-list"
-          >
-
-          </div>
-
-        </div>
-
-      </section>
 
 
     </main>
 
-  </div>
-
-
-  <!-- =========================
-       TOAST
-  ========================== -->
-
-  <div
-    class="toast"
-    id="toast"
-  >
-
-    <span id="toastIcon">
-
-      ✓
-
-    </span>
-
-    <span id="toastMessage">
-
-      Success
-
-    </span>
 
   </div>
 
+
+
+  <!-- SCRIPT -->
 
   <script src="app.js"></script>
 
+
 </body>
+
 </html>

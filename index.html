@@ -1,1782 +1,519 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+  <title>FOS Performance Portal</title>
 
-    <title>FOS Performance Portal</title>
-
-    <link rel="stylesheet" href="style.css">
-
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 
 <body>
 
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
 
-<!-- =========================================
-     SIDEBAR
-========================================= -->
-
-<aside class="sidebar">
-
-    <div class="brand">
-
-        <div class="brand-icon">F</div>
-
-        <div>
-            <h2>FOS Portal</h2>
-            <span>Performance Intelligence</span>
-        </div>
-
+    <div class="logo">
+      <div class="logo-icon">↗</div>
+      <div>
+        <h2>FOS Portal</h2>
+        <p>Performance Intelligence</p>
+      </div>
     </div>
 
+    <div class="menu-title">MAIN MENU</div>
 
-    <nav class="sidebar-nav">
+    <nav>
+      <button class="nav-btn active" data-page="dashboard">
+        📊 <span>Dashboard</span>
+      </button>
 
-        <button
-            class="nav-item active"
-            data-page="dashboard"
-        >
-            <span class="nav-icon">⌂</span>
-            Dashboard
-        </button>
+      <button class="nav-btn" data-page="employee">
+        👤 <span>Employee Performance</span>
+      </button>
 
+      <button class="nav-btn" data-page="comparison">
+        📈 <span>Zone Comparison</span>
+      </button>
 
-        <button
-            class="nav-item"
-            data-page="rm"
-        >
-            <span class="nav-icon">👤</span>
-            RM Tracker
-        </button>
-
-
-        <button
-            class="nav-item"
-            data-page="zone"
-        >
-            <span class="nav-icon">🌍</span>
-            Zone Comparison
-        </button>
-
-
-        <button
-            class="nav-item"
-            data-page="trainer"
-        >
-            <span class="nav-icon">🎓</span>
-            Trainer Analysis
-        </button>
-
-
-        <button
-            class="nav-item"
-            data-page="insights"
-        >
-            <span class="nav-icon">💡</span>
-            Insights
-        </button>
-
-
-        <button
-            class="nav-item"
-            data-page="data"
-        >
-            <span class="nav-icon">▦</span>
-            Data Explorer
-        </button>
-
+      <button class="nav-btn" data-page="data">
+        📋 <span>All Data</span>
+      </button>
     </nav>
 
-
     <div class="sidebar-bottom">
+      <button id="refreshBtn" class="refresh-btn">
+        ↻ Refresh Data
+      </button>
 
-        <div class="data-status">
-
-            <span
-                id="dataStatusDot"
-                class="status-dot"
-            ></span>
-
-            <div>
-
-                <strong id="dataStatus">
-                    Connecting...
-                </strong>
-
-                <small>
-                    Google Sheet Data
-                </small>
-
-            </div>
-
-        </div>
-
+      <p id="lastUpdated">Waiting for data...</p>
     </div>
 
-</aside>
+  </aside>
 
 
-
-<!-- =========================================
-     MAIN AREA
-========================================= -->
-
-<main class="main-content">
-
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
 
     <!-- HEADER -->
-
     <header class="topbar">
 
-        <div>
+      <div>
+        <h1 id="pageTitle">Performance Dashboard</h1>
+        <p id="pageSubtitle">
+          Live data from Google Sheets
+        </p>
+      </div>
 
-            <p class="breadcrumb">
-                FOS Performance Intelligence
-            </p>
+      <div class="top-actions">
 
-            <h1 id="pageTitle">
-                Performance Dashboard
-            </h1>
-
+        <div class="search-box">
+          🔍
+          <input
+            type="text"
+            id="globalSearch"
+            placeholder="Search E-Code, Username or Name..."
+          />
         </div>
 
+        <button id="refreshTopBtn" class="primary-btn">
+          ↻ Refresh
+        </button>
 
-        <div class="topbar-right">
-
-            <div class="last-updated">
-
-                <span>Last updated</span>
-
-                <strong id="lastUpdated">
-                    --
-                </strong>
-
-            </div>
-
-
-            <button
-                id="refreshBtn"
-                class="refresh-btn"
-                title="Refresh Data"
-            >
-                ↻ Refresh
-            </button>
-
-        </div>
+      </div>
 
     </header>
 
 
-
-    <!-- =========================================
-         GLOBAL FILTERS
-    ========================================= -->
-
-    <section class="global-filters">
-
-        <div class="filter-header">
-
-            <div>
-
-                <h3>Performance Filters</h3>
-
-                <p>
-                    Filter the entire portal to analyse performance.
-                </p>
-
-            </div>
-
-
-            <button
-                id="clearFiltersBtn"
-                class="clear-filter-btn"
-            >
-                Clear Filters
-            </button>
-
-        </div>
-
-
-        <div class="filters-grid">
-
-
-            <!-- SEARCH -->
-
-            <div class="filter-group search-group">
-
-                <label>
-                    Search RM
-                </label>
-
-                <input
-                    type="text"
-                    id="globalSearch"
-                    placeholder="E-code, Username or RM Name"
-                >
-
-            </div>
-
-
-            <!-- DATE -->
-
-            <div class="filter-group">
-
-                <label>Date From</label>
-
-                <input
-                    type="date"
-                    id="dateFrom"
-                >
-
-            </div>
-
-
-            <div class="filter-group">
-
-                <label>Date To</label>
-
-                <input
-                    type="date"
-                    id="dateTo"
-                >
-
-            </div>
-
-
-            <!-- ZONE -->
-
-            <div class="filter-group">
-
-                <label>Zone</label>
-
-                <select id="zoneFilter">
-
-                    <option value="">
-                        All Zones
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- CITY -->
-
-            <div class="filter-group">
-
-                <label>City</label>
-
-                <select id="cityFilter">
-
-                    <option value="">
-                        All Cities
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- ZM -->
-
-            <div class="filter-group">
-
-                <label>ZM</label>
-
-                <select id="zmFilter">
-
-                    <option value="">
-                        All ZMs
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- TL -->
-
-            <div class="filter-group">
-
-                <label>TL</label>
-
-                <select id="tlFilter">
-
-                    <option value="">
-                        All TLs
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- TRAINER -->
-
-            <div class="filter-group">
-
-                <label>Trainer</label>
-
-                <select id="trainerFilter">
-
-                    <option value="">
-                        All Trainers
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- TENURE -->
-
-            <div class="filter-group">
-
-                <label>Tenure</label>
-
-                <select id="tenureFilter">
-
-                    <option value="">
-                        All Tenures
-                    </option>
-
-                    <option value="0-30">
-                        0 - 30 Days
-                    </option>
-
-                    <option value="31-60">
-                        31 - 60 Days
-                    </option>
-
-                    <option value="61-90">
-                        61 - 90 Days
-                    </option>
-
-                    <option value="91-180">
-                        91 - 180 Days
-                    </option>
-
-                    <option value="181+">
-                        180+ Days
-                    </option>
-
-                </select>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: DASHBOARD
-    ========================================= -->
-
-    <section
-        id="dashboard"
-        class="page active-page"
-    >
-
-
-        <!-- KPI CARDS -->
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>Business Overview</h2>
-
-                <p>
-                    A quick view of overall FOS performance.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="kpi-grid">
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        Active RMs
-                    </span>
-
-                    <span class="stat-icon">
-                        👥
-                    </span>
-
-                </div>
-
-                <h2 id="kpiActiveRMs">0</h2>
-
-                <p>
-                    Unique RMs in selected data
-                </p>
-
-            </div>
-
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        Appointments
-                    </span>
-
-                    <span class="stat-icon">
-                        📅
-                    </span>
-
-                </div>
-
-                <h2 id="kpiAppointments">0</h2>
-
-                <p id="kpiAppointmentVisit">
-                    Visit %: 0%
-                </p>
-
-            </div>
-
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        Visits
-                    </span>
-
-                    <span class="stat-icon">
-                        🚶
-                    </span>
-
-                </div>
-
-                <h2 id="kpiVisits">0</h2>
-
-                <p id="kpiVisitConversion">
-                    Visit Conversion: 0%
-                </p>
-
-            </div>
-
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        Bookings
-                    </span>
-
-                    <span class="stat-icon">
-                        ✓
-                    </span>
-
-                </div>
-
-                <h2 id="kpiBookings">0</h2>
-
-                <p id="kpiAppointmentConversion">
-                    Appointment Conversion: 0%
-                </p>
-
-            </div>
-
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        Total APE
-                    </span>
-
-                    <span class="stat-icon">
-                        ₹
-                    </span>
-
-                </div>
-
-                <h2 id="kpiAPE">₹0</h2>
-
-                <p>
-                    Selected performance data
-                </p>
-
-            </div>
-
-
-
-            <div class="stat-card">
-
-                <div class="stat-top">
-
-                    <span class="stat-label">
-                        MY Share
-                    </span>
-
-                    <span class="stat-icon">
-                        ★
-                    </span>
-
-                </div>
-
-                <h2 id="kpiMYShare">0%</h2>
-
-                <p id="kpiMYValue">
-                    MY: ₹0
-                </p>
-
-            </div>
-
-
-        </div>
-
-
-
-        <!-- PERFORMANCE SUMMARY -->
-
-        <div class="dashboard-two-column">
-
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            Conversion Funnel
-                        </h3>
-
-                        <p>
-                            Identify where performance drops.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div class="funnel-container">
-
-
-                    <div class="funnel-row">
-
-                        <div class="funnel-label">
-
-                            <span>
-                                Appointments
-                            </span>
-
-                            <strong
-                                id="funnelAppointments"
-                            >
-                                0
-                            </strong>
-
-                        </div>
-
-                        <div class="funnel-track">
-
-                            <div
-                                id="funnelAppointmentBar"
-                                class="funnel-bar appointment-bar"
-                            ></div>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="funnel-row">
-
-                        <div class="funnel-label">
-
-                            <span>
-                                Visits
-                            </span>
-
-                            <strong
-                                id="funnelVisits"
-                            >
-                                0
-                            </strong>
-
-                        </div>
-
-                        <div class="funnel-track">
-
-                            <div
-                                id="funnelVisitBar"
-                                class="funnel-bar visit-bar"
-                            ></div>
-
-                        </div>
-
-                    </div>
-
-
-
-                    <div class="funnel-row">
-
-                        <div class="funnel-label">
-
-                            <span>
-                                Bookings
-                            </span>
-
-                            <strong
-                                id="funnelBookings"
-                            >
-                                0
-                            </strong>
-
-                        </div>
-
-                        <div class="funnel-track">
-
-                            <div
-                                id="funnelBookingBar"
-                                class="funnel-bar booking-bar"
-                            ></div>
-
-                        </div>
-
-                    </div>
-
-
-                </div>
-
-            </div>
-
-
-
-            <!-- QUICK INSIGHTS -->
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            Quick Insights
-                        </h3>
-
-                        <p>
-                            Automatically generated performance observations.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="quickInsights"
-                    class="quick-insights"
-                >
-
-                    <div class="empty-state">
-
-                        Loading insights...
-
-                    </div>
-
-                </div>
-
-            </div>
-
-
-        </div>
-
-
-
-        <!-- TOP PERFORMERS -->
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        Top Performers
-                    </h3>
-
-                    <p>
-                        Ranked by business performance.
-                    </p>
-
-                </div>
-
-
-                <select
-                    id="topPerformerMetric"
-                    class="small-select"
-                >
-
-                    <option value="bookings">
-                        By Bookings
-                    </option>
-
-                    <option value="ape">
-                        By APE
-                    </option>
-
-                    <option value="visitConversion">
-                        By Visit Conversion
-                    </option>
-
-                    <option value="my">
-                        By MY
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <div class="table-responsive">
-
-                <table id="topPerformersTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>Rank</th>
-
-                            <th>RM</th>
-
-                            <th>E-code</th>
-
-                            <th>Zone</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-
-        <!-- ZONE SNAPSHOT -->
-
-        <div class="section-heading lower-heading">
-
-            <div>
-
-                <h2>
-                    Zone Snapshot
-                </h2>
-
-                <p>
-                    Compare zones at a glance.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div
-            id="zoneSnapshot"
-            class="zone-cards-grid"
-        ></div>
-
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: RM TRACKER
-    ========================================= -->
-
-    <section
-        id="rm"
-        class="page"
-    >
-
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>
-                    RM Performance Tracker
-                </h2>
-
-                <p>
-                    Search any E-code, Username or RM and analyse performance.
-                </p>
-
-            </div>
-
-        </div>
-
-
-
-        <!-- RM SUMMARY -->
-
-        <div
-            id="selectedRMSummary"
-            class="selected-rm-summary hidden"
-        >
-
-            <div class="rm-profile-main">
-
-                <div class="avatar">
-                    RM
-                </div>
-
-                <div>
-
-                    <h2 id="profileRMName">
-                        --
-                    </h2>
-
-                    <p id="profileRMDetails">
-                        --
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="rm-profile-metrics">
-
-                <div>
-
-                    <span>Tenure</span>
-
-                    <strong id="profileTenure">
-                        --
-                    </strong>
-
-                </div>
-
-                <div>
-
-                    <span>TL</span>
-
-                    <strong id="profileTL">
-                        --
-                    </strong>
-
-                </div>
-
-                <div>
-
-                    <span>ZM</span>
-
-                    <strong id="profileZM">
-                        --
-                    </strong>
-
-                </div>
-
-                <div>
-
-                    <span>Trainer</span>
-
-                    <strong id="profileTrainer">
-                        --
-                    </strong>
-
-                </div>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        All RM Performance
-                    </h3>
-
-                    <p id="rmTableCount">
-                        Loading...
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="table-responsive rm-table-wrapper">
-
-                <table id="rmTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>E-code</th>
-
-                            <th>Username</th>
-
-                            <th>RM Name</th>
-
-                            <th>DOJ</th>
-
-                            <th>Tenure</th>
-
-                            <th>TL</th>
-
-                            <th>ZM</th>
-
-                            <th>City</th>
-
-                            <th>Zone</th>
-
-                            <th>Trainer</th>
-
-                            <th>Appt.</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit %</th>
-
-                            <th>Appt Conv.</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                            <th>MY</th>
-
-                            <th>MY %</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: ZONE COMPARISON
-    ========================================= -->
-
-    <section
-        id="zone"
-        class="page"
-    >
-
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>
-                    Zone-wise Performance
-                </h2>
-
-                <p>
-                    Compare business, conversion and MY performance across zones.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="comparison-grid">
-
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            Zone Ranking
-                        </h3>
-
-                        <p>
-                            Performance comparison.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="zoneRanking"
-                    class="ranking-list"
-                ></div>
-
-            </div>
-
-
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            Best & Attention Areas
-                        </h3>
-
-                        <p>
-                            Quick zone-level analysis.
-                        </p>
-
-                    </div>
-
-                </div>
-
-
-                <div
-                    id="zoneInsights"
-                    class="quick-insights"
-                ></div>
-
-            </div>
-
-
-        </div>
-
-
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        Detailed Zone Comparison
-                    </h3>
-
-                    <p>
-                        All major performance factors.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="table-responsive">
-
-                <table id="zoneTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>Zone</th>
-
-                            <th>Active RMs</th>
-
-                            <th>Appointments</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit %</th>
-
-                            <th>Appt Conv.</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                            <th>MY</th>
-
-                            <th>MY Share</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-
-        <!-- CITY COMPARISON -->
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        City-wise Comparison
-                    </h3>
-
-                    <p>
-                        Compare performance between cities.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="table-responsive">
-
-                <table id="cityTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>City</th>
-
-                            <th>Active RMs</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                            <th>MY</th>
-
-                            <th>MY Share</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: TRAINER ANALYSIS
-    ========================================= -->
-
-    <section
-        id="trainer"
-        class="page"
-    >
-
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>
-                    Trainer, TL & ZM Analysis
-                </h2>
-
-                <p>
-                    Compare team performance across reporting structures.
-                </p>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="comparison-grid">
-
-
-            <!-- TRAINER -->
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            Trainer Performance
-                        </h3>
-
-                    </div>
-
-                </div>
-
-
-                <div class="table-responsive">
-
-                    <table id="trainerTable">
-
-                        <thead>
-
-                            <tr>
-
-                                <th>Trainer</th>
-
-                                <th>RMs</th>
-
-                                <th>Bookings</th>
-
-                                <th>APE</th>
-
-                                <th>Visit Conv.</th>
-
-                            </tr>
-
-                        </thead>
-
-
-                        <tbody></tbody>
-
-                    </table>
-
-                </div>
-
-            </div>
-
-
-
-            <!-- TL -->
-
-            <div class="panel">
-
-                <div class="panel-header">
-
-                    <div>
-
-                        <h3>
-                            TL Performance
-                        </h3>
-
-                    </div>
-
-                </div>
-
-
-                <div class="table-responsive">
-
-                    <table id="tlTable">
-
-                        <thead>
-
-                            <tr>
-
-                                <th>TL</th>
-
-                                <th>RMs</th>
-
-                                <th>Bookings</th>
-
-                                <th>APE</th>
-
-                                <th>Visit Conv.</th>
-
-                            </tr>
-
-                        </thead>
-
-
-                        <tbody></tbody>
-
-                    </table>
-
-                </div>
-
-            </div>
-
-
-        </div>
-
-
-
-        <!-- ZM -->
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        ZM Performance
-                    </h3>
-
-                    <p>
-                        Compare teams under each ZM.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="table-responsive">
-
-                <table id="zmTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>ZM</th>
-
-                            <th>RMs</th>
-
-                            <th>Appointments</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                            <th>MY Share</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: INSIGHTS
-    ========================================= -->
-
-    <section
-        id="insights"
-        class="page"
-    >
-
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>
-                    Root Cause Analysis
-                </h2>
-
-                <p>
-                    Identify where RMs and teams need attention.
-                </p>
-
-            </div>
-
-        </div>
-
-
-
-        <div class="insight-category-grid">
-
-
-            <div class="insight-column">
-
-                <div class="insight-title red-title">
-
-                    🔴 High Appointments, Low Visits
-
-                </div>
-
-                <div
-                    id="lowVisitInsights"
-                    class="insight-list"
-                ></div>
-
-            </div>
-
-
-
-            <div class="insight-column">
-
-                <div class="insight-title orange-title">
-
-                    🟠 Good Visits, Low Bookings
-
-                </div>
-
-                <div
-                    id="lowBookingInsights"
-                    class="insight-list"
-                ></div>
-
-            </div>
-
-
-
-            <div class="insight-column">
-
-                <div class="insight-title purple-title">
-
-                    🟣 Good Bookings, Low MY
-
-                </div>
-
-                <div
-                    id="lowMYInsights"
-                    class="insight-list"
-                ></div>
-
-            </div>
-
-
-
-            <div class="insight-column">
-
-                <div class="insight-title green-title">
-
-                    🟢 Strong Performers
-
-                </div>
-
-                <div
-                    id="strongPerformerInsights"
-                    class="insight-list"
-                ></div>
-
-            </div>
-
-
-        </div>
-
-
-
-        <!-- VINTAGE -->
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        Vintage / Tenure Analysis
-                    </h3>
-
-                    <p>
-                        Understand how performance changes with experience.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div class="table-responsive">
-
-                <table id="vintageTable">
-
-                    <thead>
-
-                        <tr>
-
-                            <th>Tenure Group</th>
-
-                            <th>RMs</th>
-
-                            <th>Appointments</th>
-
-                            <th>Visits</th>
-
-                            <th>Bookings</th>
-
-                            <th>Visit Conv.</th>
-
-                            <th>APE</th>
-
-                            <th>MY Share</th>
-
-                        </tr>
-
-                    </thead>
-
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-
-        <!-- MY ANALYSIS -->
-
-        <div class="panel full-panel">
-
-            <div class="panel-header">
-
-                <div>
-
-                    <h3>
-                        MY Performance Analysis
-                    </h3>
-
-                    <p>
-                        Identify high and low Multi-Year contribution.
-                    </p>
-
-                </div>
-
-            </div>
-
-
-            <div
-                id="myAnalysis"
-                class="my-analysis-grid"
-            ></div>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- =========================================
-         PAGE: DATA EXPLORER
-    ========================================= -->
-
-    <section
-        id="data"
-        class="page"
-    >
-
-
-        <div class="section-heading">
-
-            <div>
-
-                <h2>
-                    Data Explorer
-                </h2>
-
-                <p>
-                    View the data currently received from Google Sheets.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="data-note">
-
-            <strong>
-                Google Sheet Data Source
-            </strong>
-
-            <p>
-                This section automatically displays the data fields received from the connected Google Sheet.
-            </p>
-
-        </div>
-
-
-        <div class="panel full-panel">
-
-            <div class="table-responsive">
-
-                <table id="rawDataTable">
-
-                    <thead></thead>
-
-                    <tbody></tbody>
-
-                </table>
-
-            </div>
-
-        </div>
-
-
-    </section>
-
-
-
-</main>
-
-
-
-<!-- =========================================
-     LOADING OVERLAY
-========================================= -->
-
-<div
-    id="loadingOverlay"
-    class="loading-overlay"
->
-
-    <div class="loader-box">
-
-        <div class="spinner"></div>
-
-        <h3>
-            Loading FOS Data
-        </h3>
-
-        <p>
-            Connecting to Google Sheets...
-        </p>
-
+    <!-- LOADING -->
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <p>Loading data from Google Sheets...</p>
     </div>
 
-</div>
+
+    <!-- ERROR -->
+    <div id="errorBox" class="error-box hidden">
+      <strong>Unable to load data.</strong>
+      <p id="errorText"></p>
+    </div>
 
 
+    <!-- ================= DASHBOARD ================= -->
 
-<!-- =========================================
-     RM DETAILS MODAL
-========================================= -->
+    <section id="dashboardPage" class="page active-page">
 
-<div
-    id="rmModal"
-    class="modal hidden"
->
+      <div class="welcome-banner">
 
-    <div class="modal-backdrop"></div>
+        <div>
+          <h2>FOS Performance Dashboard 👋</h2>
+          <p>
+            Track performance, compare zones and analyse employee productivity.
+          </p>
+        </div>
+
+        <div class="banner-icon">
+          📊
+        </div>
+
+      </div>
 
 
-    <div class="modal-content">
+      <!-- FILTERS -->
+      <div class="filters-card">
 
+        <div class="filter-group">
+          <label>Zone</label>
+          <select id="zoneFilter">
+            <option value="">All Zones</option>
+          </select>
+        </div>
 
-        <button
-            id="closeModalBtn"
-            class="modal-close"
-        >
-            ×
+        <div class="filter-group">
+          <label>City</label>
+          <select id="cityFilter">
+            <option value="">All Cities</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>TL</label>
+          <select id="tlFilter">
+            <option value="">All TLs</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>ZM</label>
+          <select id="zmFilter">
+            <option value="">All ZMs</option>
+          </select>
+        </div>
+
+        <button id="clearFilters" class="secondary-btn">
+          Clear Filters
         </button>
 
+      </div>
 
-        <div class="modal-header">
 
+      <!-- KPI CARDS -->
+      <div class="stats-grid">
+
+        <div class="stat-card">
+          <div class="stat-icon blue">👥</div>
+          <p>Active Employees</p>
+          <h2 id="activeEmployees">0</h2>
+          <span>Unique E-Codes</span>
+        </div>
+
+
+        <div class="stat-card">
+          <div class="stat-icon purple">📅</div>
+          <p>Total Appointments</p>
+          <h2 id="totalAppt">0</h2>
+          <span>Live calculation</span>
+        </div>
+
+
+        <div class="stat-card">
+          <div class="stat-icon orange">🚶</div>
+          <p>Total Visits</p>
+          <h2 id="totalVisit">0</h2>
+          <span id="visitPercent">0% visit rate</span>
+        </div>
+
+
+        <div class="stat-card">
+          <div class="stat-icon green">✓</div>
+          <p>Total Bookings</p>
+          <h2 id="totalBooking">0</h2>
+          <span id="apptConversion">0% appointment conversion</span>
+        </div>
+
+
+        <div class="stat-card">
+          <div class="stat-icon teal">₹</div>
+          <p>Total APE</p>
+          <h2 id="totalAPE">₹0</h2>
+          <span>Business generated</span>
+        </div>
+
+
+        <div class="stat-card">
+          <div class="stat-icon red">📈</div>
+          <p>Visit → Booking</p>
+          <h2 id="visitBookingConversion">0%</h2>
+          <span>Overall conversion</span>
+        </div>
+
+      </div>
+
+
+      <!-- ANALYTICS -->
+      <div class="dashboard-grid">
+
+        <div class="panel large-panel">
+
+          <div class="panel-header">
             <div>
-
-                <p>
-                    RM Performance Profile
-                </p>
-
-                <h2 id="modalRMName">
-                    --
-                </h2>
-
-                <span id="modalRMIdentity">
-                    --
-                </span>
-
+              <h3>Zone Performance</h3>
+              <p>Performance comparison by Zone</p>
             </div>
+          </div>
+
+          <div id="zonePerformance" class="zone-performance">
+            No data available
+          </div>
 
         </div>
 
 
-        <div
-            id="modalRMDetails"
-            class="modal-details-grid"
-        ></div>
+        <div class="panel">
+
+          <div class="panel-header">
+            <div>
+              <h3>Top Performers</h3>
+              <p>Based on APE</p>
+            </div>
+          </div>
+
+          <div id="topPerformers">
+            No data available
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
 
 
-        <div
-            id="modalPerformance"
-            class="modal-performance-grid"
-        ></div>
+
+    <!-- ================= EMPLOYEE PAGE ================= -->
+
+    <section id="employeePage" class="page">
+
+      <div class="employee-search-card">
+
+        <h2>Employee Performance</h2>
+
+        <p>
+          Search using E-Code, Username or Employee Name.
+        </p>
+
+        <div class="employee-search-row">
+
+          <input
+            type="text"
+            id="employeeSearch"
+            placeholder="Enter E-Code, Username or Name..."
+          />
+
+          <button id="employeeSearchBtn" class="primary-btn">
+            Search
+          </button>
+
+        </div>
+
+      </div>
 
 
-    </div>
+      <!-- EMPLOYEE DETAILS -->
+      <div id="employeeDetails" class="hidden">
 
-</div>
+        <div class="employee-profile">
+
+          <div class="profile-avatar">
+            👤
+          </div>
+
+          <div class="profile-info">
+
+            <h2 id="empName">-</h2>
+
+            <p id="empCode">
+              E-Code: -
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <div class="details-grid">
+
+          <div class="detail-card">
+            <span>Username</span>
+            <strong id="empUsername">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>Date of Joining</span>
+            <strong id="empDOJ">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>Tenure</span>
+            <strong id="empTenure">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>TL</span>
+            <strong id="empTL">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>ZM</span>
+            <strong id="empZM">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>City</span>
+            <strong id="empCity">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>Zone</span>
+            <strong id="empZone">-</strong>
+          </div>
+
+          <div class="detail-card">
+            <span>Trainer</span>
+            <strong id="empTrainer">-</strong>
+          </div>
+
+        </div>
+
+
+        <!-- EMPLOYEE KPI -->
+        <div class="stats-grid employee-stats">
+
+          <div class="stat-card">
+            <p>Appointments</p>
+            <h2 id="empAppt">0</h2>
+          </div>
+
+          <div class="stat-card">
+            <p>Visits</p>
+            <h2 id="empVisit">0</h2>
+          </div>
+
+          <div class="stat-card">
+            <p>Bookings</p>
+            <h2 id="empBooking">0</h2>
+          </div>
+
+          <div class="stat-card">
+            <p>APE</p>
+            <h2 id="empAPE">₹0</h2>
+          </div>
+
+          <div class="stat-card">
+            <p>Appointment Conv.</p>
+            <h2 id="empApptConv">0%</h2>
+          </div>
+
+          <div class="stat-card">
+            <p>Visit Conv.</p>
+            <h2 id="empVisitConv">0%</h2>
+          </div>
+
+        </div>
+
+
+        <!-- DATE WISE -->
+        <div class="panel">
+
+          <div class="panel-header">
+            <div>
+              <h3>Date-wise Performance</h3>
+              <p>Daily performance records for this employee</p>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+
+            <table>
+
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Appointment</th>
+                  <th>Visit</th>
+                  <th>Booking</th>
+                  <th>APE</th>
+                  <th>Appt Conv.</th>
+                  <th>Visit Conv.</th>
+                </tr>
+              </thead>
+
+              <tbody id="employeeDateTable"></tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div id="employeeNotFound" class="empty-state">
+        Search for an employee to view complete performance details.
+      </div>
+
+    </section>
 
 
 
-<script src="app.js"></script>
+    <!-- ================= ZONE COMPARISON ================= -->
 
+    <section id="comparisonPage" class="page">
+
+      <div class="section-heading">
+        <h2>Zone Comparison</h2>
+        <p>Compare performance across Zones.</p>
+      </div>
+
+
+      <div class="table-wrapper panel">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Zone</th>
+              <th>Employees</th>
+              <th>Appointments</th>
+              <th>Visits</th>
+              <th>Bookings</th>
+              <th>APE</th>
+              <th>Visit %</th>
+              <th>Appt Conv.</th>
+              <th>Visit Conv.</th>
+            </tr>
+          </thead>
+
+          <tbody id="zoneComparisonTable"></tbody>
+
+        </table>
+
+      </div>
+
+    </section>
+
+
+
+    <!-- ================= ALL DATA ================= -->
+
+    <section id="dataPage" class="page">
+
+      <div class="section-heading">
+
+        <h2>All Employee Data</h2>
+
+        <p>
+          Live records from Google Sheets.
+        </p>
+
+      </div>
+
+
+      <div class="data-controls">
+
+        <input
+          type="text"
+          id="tableSearch"
+          placeholder="Search employee..."
+        />
+
+        <select id="dataZoneFilter">
+          <option value="">All Zones</option>
+        </select>
+
+      </div>
+
+
+      <div class="table-wrapper panel">
+
+        <table>
+
+          <thead id="allDataHead"></thead>
+
+          <tbody id="allDataBody"></tbody>
+
+        </table>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <script src="app.js"></script>
 
 </body>
 </html>
